@@ -28,7 +28,7 @@ AZURE_OPENAI_ENDPOINT = os.getenv(
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4")
 
 # Increment version at every deep change of the system prompt and create a new file prompts/system_prompt_vN.md
-PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v1")
+PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v4")
 
 SYSTEM_PROMPT_PATH = f"prompts/system_prompt_{PROMPT_VERSION}.md"
 

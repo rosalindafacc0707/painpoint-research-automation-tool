@@ -24,6 +24,25 @@
 - Lo script di test ora abilita il web search tool lato API invece di
   aspettarsi un file di evidenze compilato a mano.
 
+## v4 — 2026-07-23
+- Diagnosticato su un report reale (The North Face, provider Azure): il
+  titolo di una fonte conteneva un carattere `|` non escapato ("The North
+  Face | Case Study"), che rompeva la tabella markdown dei pain point
+  durante la conversione in docx, spostando le colonne e facendo perdere in
+  silenzio il vero valore di Confidence per una riga. Aggiunta regola
+  esplicita in "Output format": mai un `|` letterale dentro una cella di
+  tabella, riscrivere il titolo della fonte se necessario.
+- Aggiunta regola in "Evidence discipline": se una fonte non ha una data di
+  pubblicazione rilevabile (es. una pagina evergreen come careers o brand
+  page), scrivere "n.d." invece di sostituire con la data di oggi o di
+  accesso — nel report analizzato, 3 fonti su 6 avevano la stessa data
+  sospetta (probabilmente fabbricata) invece di "n.d.".
+- Corretto anche uno script bug (non del prompt): il refactor per lo switch
+  di provider aveva rimosso l'iniezione a runtime di Prompt version / Agent
+  version / Date of run nel system prompt — per questo nel report analizzato
+  il modello aveva inventato "API research analyst" come Agent version.
+  Reintrodotta in scripts/run_prompt_test.py.
+
 ## v3 — 2026-07-23
 - Aggiunto un secondo strumento di ricerca: oltre a `web_search` (scoperta
   delle fonti, lato API), l'agente ora dispone di `fetch_url`, servito da un

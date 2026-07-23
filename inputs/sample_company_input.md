@@ -1,7 +1,7 @@
-# Prospect Intake — [Nome Azienda]
+# Prospect Intake — Just Eat Takeaway.com
 
 ## Mandatory Field
-- **Company Name**:
+- **Just Eat Takeaway.com**:
 
 ## Optional Field
 - Website:

@@ -63,6 +63,20 @@ async def main_async(args) -> None:
         sys.exit(f"Unknown provider: {provider!r}. Use 'anthropic' or 'azure'.")
 
     system_prompt = load_text(ROOT / SYSTEM_PROMPT_PATH)
+
+    # "Agent version" reuses PROMPT_VERSION (no separate versioned pipeline in
+    # this phase). Injected at runtime, along with provider and run date, so
+    # the model has real values to report in the header instead of
+    # inventing something plausible-sounding.
+    run_metadata = (
+        "\n\n## Run metadata (report this exactly in the report header)\n"
+        f"- Prompt version: {PROMPT_VERSION}\n"
+        f"- Agent version: {PROMPT_VERSION}\n"
+        f"- Provider: {provider}\n"
+        f"- Date of run: {datetime.now().strftime('%Y-%m-%d')}\n"
+    )
+    system_prompt += run_metadata
+
     company_input = load_text(Path(args.input_file))
 
     server_params = StdioServerParameters(
