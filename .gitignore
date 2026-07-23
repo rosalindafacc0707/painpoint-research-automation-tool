@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Variabili d'ambiente (contiene la chiave API)
+.env
+
+# Output dei test: contengono dati grezzi su aziende prospect, restano locali
+outputs/*.md
+!outputs/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.vscode
