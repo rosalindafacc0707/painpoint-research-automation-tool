@@ -5,19 +5,19 @@ Script for the manual test of Phase 1 (Prompt Prototyping).
 Usage:
     python scripts/run_prompt_test.py inputs/sample_company_input.md
     python scripts/run_prompt_test.py inputs/sample_company_input.md --company "Acme Corp"
-    python scripts/run_prompt_test.py inputs/sample_company_input.md --provider opensource
+    python scripts/run_prompt_test.py inputs/sample_company_input.md --provider azure
 
 It's not an automatic pipeline: useful just to validate the system prompt on
 single real companies, one company each execution. The result always requires
 human review before every commercial use.
 
 Provider switch (PROVIDER in .env.development, or --provider on the CLI):
-  - "anthropic"  (default) — Claude, with its server-side web_search tool for
+  - "anthropic" (default) — Claude, with its server-side web_search tool for
     discovery plus the local fetch_url MCP tool for reading pages.
-  - "opensource" — any OpenAI-compatible endpoint (e.g. GPT-OSS via Ollama).
-    Since these runtimes have no built-in web search, this path uses TWO
-    local MCP tools instead: web_search_ddg (discovery) and fetch_url
-    (reading). See providers/opensource_provider.py for setup notes.
+  - "azure" — an Azure OpenAI / Azure AI Foundry deployment. Since Azure
+    OpenAI has no built-in web search, this path uses TWO local MCP tools
+    instead: web_search_ddg (discovery) and fetch_url (reading). See
+    providers/azure_provider.py for required config and setup notes.
 
 Either way, the MCP server (mcp_server/scraper_server.py) is launched once as
 a stdio subprocess and its tools are handed to whichever provider is active.
@@ -57,10 +57,10 @@ async def main_async(args) -> None:
         if not ANTHROPIC_API_KEY:
             sys.exit("ANTHROPIC_API_KEY not set. Check for it in the .env file")
         from providers.anthropic_provider import run_agent
-    elif provider == "opensource":
-        from providers.opensource_provider import run_agent
+    elif provider == "azure":
+        from providers.azure_provider import run_agent
     else:
-        sys.exit(f"Unknown provider: {provider!r}. Use 'anthropic' or 'opensource'.")
+        sys.exit(f"Unknown provider: {provider!r}. Use 'anthropic' or 'azure'.")
 
     system_prompt = load_text(ROOT / SYSTEM_PROMPT_PATH)
     company_input = load_text(Path(args.input_file))
@@ -114,7 +114,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["anthropic", "opensource"],
+        choices=["anthropic", "azure"],
         default=None,
         help="Override PROVIDER from .env.development for this run.",
     )

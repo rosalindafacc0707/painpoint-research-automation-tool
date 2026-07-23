@@ -7,7 +7,7 @@ httpx>=0.27.0
 trafilatura>=1.12.0
 ddgs>=9.0.0
 
-# Open-source / self-hosted provider switch (PROVIDER=opensource in
-# .env.development) — talks to any OpenAI-compatible endpoint, e.g. GPT-OSS
-# served locally via Ollama.
+# Azure OpenAI / Azure AI Foundry provider switch (PROVIDER=azure in
+# .env.development) — talks to your Azure OpenAI deployment via the
+# AsyncAzureOpenAI client.
 openai>=1.50.0

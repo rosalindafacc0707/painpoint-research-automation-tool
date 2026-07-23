@@ -25,7 +25,7 @@ ffd-painpoint-research/
 ├── providers/
 │   ├── base.py                # RunResult condiviso tra i provider
 │   ├── anthropic_provider.py  # Claude + web_search (server-side) + fetch_url
-│   └── opensource_provider.py # GPT-OSS/altri via endpoint OpenAI-compatible
+│   └── azure_provider.py      # Azure OpenAI / Azure AI Foundry + web_search_ddg + fetch_url
 ├── mcp_server/
 │   └── scraper_server.py      # tool MCP: fetch_url, web_search_ddg
 ├── prompts/
@@ -76,7 +76,7 @@ ffd-painpoint-research/
    script. L'output viene stampato a schermo e salvato in `outputs/` come
    `{azienda}_{versione_prompt}_{provider}_{timestamp}.md`.
 
-## Switch di provider: Anthropic vs open-source
+## Switch di provider: Anthropic vs Azure OpenAI
 
 Lo script supporta due provider, scelti da `PROVIDER` in `.env.development`
 oppure passando `--provider` da riga di comando:
@@ -85,35 +85,43 @@ oppure passando `--provider` da riga di comando:
 # Anthropic (default) — usa Claude + web_search server-side + fetch_url
 python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider anthropic
 
-# Open-source — usa un endpoint OpenAI-compatible (es. GPT-OSS via Ollama)
-python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider opensource
+# Azure OpenAI / Azure AI Foundry
+python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider azure
 ```
 
-Per usare GPT-OSS in locale via [Ollama](https://ollama.com):
-```
-ollama pull gpt-oss:20b
-ollama serve
-```
-`OPENSOURCE_BASE_URL` in `.env.development` punta di default a
-`http://localhost:11434/v1` (l'endpoint OpenAI-compatible di Ollama). Per
-usare invece un provider hosted (Groq, Together, ecc.) basta cambiare
-`OPENSOURCE_BASE_URL`, `OPENSOURCE_MODEL` e impostare `OPENSOURCE_API_KEY`
-in `.env`.
+Per usare Azure, dalla pagina della risorsa in Azure AI Foundry servono due
+valori (oltre alla API key):
+
+- `AZURE_OPENAI_API_KEY` → in `.env` (è un segreto, come `ANTHROPIC_API_KEY`)
+- `AZURE_OPENAI_ENDPOINT` → in `.env.development`, deve finire in
+  **`/openai/v1`** (es. `https://<risorsa>.services.ai.azure.com/openai/v1`)
+  — è la superficie OpenAI-compatibile "v1" della risorsa Foundry, confermata
+  funzionante; non l'endpoint classico `openai.azure.com` né il project
+  endpoint nudo senza `/openai/v1`
+- `AZURE_OPENAI_DEPLOYMENT` → in `.env.development`, il nome esatto del
+  deployment come appare in Azure AI Foundry → Deployments (non
+  necessariamente il nome del modello sottostante)
 
 Nota architetturale: Claude ha un tool di web search integrato lato server,
-i modelli open-source no. Per questo il path `opensource` usa due tool MCP
-locali (`web_search_ddg` per scoprire le fonti + `fetch_url` per leggerle),
-mentre il path `anthropic` usa solo `fetch_url` (la scoperta la fa
-`web_search` di Claude). Entrambi i path condividono lo stesso
-`mcp_server/scraper_server.py` e lo stesso system prompt — quello che cambia
-è solo il modello e come vengono esposti i tool.
+Azure no. Per questo il path `azure` usa due tool MCP locali (`web_search_ddg`
+per scoprire le fonti + `fetch_url` per leggerle), mentre il path `anthropic`
+usa solo `fetch_url` (la scoperta la fa `web_search` di Claude). Entrambi i
+path condividono lo stesso `mcp_server/scraper_server.py` e lo stesso system
+prompt — quello che cambia è il modello, l'API sottostante (Anthropic
+Messages API vs Responses API) e come vengono esposti i tool.
+
+Scelta implementativa: il provider Azure usa il client `openai.OpenAI`
+semplice (non `AzureOpenAI`, non serve `api_version` su questa superficie) e
+la **Responses API** (`client.responses.create`), perché è quello che
+risulta effettivamente funzionante contro la risorsa Foundry — non la Chat
+Completions API usata invece per il path open-source/generico.
 
 **Se ricevi `Your credit balance is too low` con il provider Anthropic**: non
 è un bug, è il credito API esaurito sull'account collegato alla
 `ANTHROPIC_API_KEY` in uso. Vai sulla Anthropic Console
 (console.anthropic.com), sezione Plans & Billing, e ricarica il credito o
 aggiorna il piano. Nel frattempo puoi continuare a testare il prompt con
-`--provider opensource`.
+`--provider azure`.
 
 ## Regole ferree di questa fase
 

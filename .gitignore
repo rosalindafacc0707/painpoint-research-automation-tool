@@ -18,6 +18,7 @@ env/
 
 # Output dei test: contengono dati grezzi su aziende prospect, restano locali
 outputs/*.md
+outputs/*.docx
 !outputs/.gitkeep
 
 # OS
@@ -28,3 +29,5 @@ Thumbs.db
 .vscode/
 .idea/
 .vscode
+
+inputs/moscow/

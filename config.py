@@ -7,25 +7,25 @@ load_dotenv(".env.development")
 load_dotenv(".env", override=True)
 
 # --- Provider switch ------------------------------------------------------
-# "anthropic"  -> Claude via the Anthropic API (default)
-# "opensource" -> any OpenAI-compatible endpoint (e.g. GPT-OSS via Ollama,
-#                 vLLM, LM Studio, or a hosted provider like Groq/Together)
+# "anthropic" -> Claude via the Anthropic API (default)
+# "azure"     -> Azure OpenAI / Azure AI Foundry deployment
 PROVIDER = os.getenv("PROVIDER", "anthropic")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 MODEL_NAME = os.getenv("MODEL_NAME", "claude-sonnet-5")
 
-# --- Open-source / self-hosted backend -------------------------------------
-# Defaults target a local Ollama instance running GPT-OSS
-# (`ollama pull gpt-oss:20b && ollama serve`). Point OPENSOURCE_BASE_URL at
-# any other OpenAI-compatible endpoint to use a different runtime/provider.
-OPENSOURCE_BASE_URL = os.getenv("OPENSOURCE_BASE_URL", "http://localhost:11434/v1")
-OPENSOURCE_MODEL = os.getenv("OPENSOURCE_MODEL", "gpt-oss:20b")
-# Local runtimes (Ollama, LM Studio) ignore this but the OpenAI SDK requires
-# a non-empty string. Set a real key here if OPENSOURCE_BASE_URL points to a
-# hosted provider (Groq, Together, ...).
-OPENSOURCE_API_KEY = os.getenv("OPENSOURCE_API_KEY", "not-needed")
+# --- Azure OpenAI / Azure AI Foundry ---------------------------------------
+# Uses the OpenAI-compatible v1 surface exposed by the Foundry resource
+# (base URL ending in /openai/v1), via the plain `openai.OpenAI` client and
+# the Responses API (client.responses.create) — confirmed working against
+# the actual deployed resource. No api_version needed on this surface.
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv(
+    "AZURE_OPENAI_ENDPOINT", "https://your-resource.services.ai.azure.com/openai/v1"
+)
+# The deployment name configured in Azure AI Foundry (NOT the base model name).
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4")
 
 # Increment version at every deep change of the system prompt and create a new file prompts/system_prompt_vN.md
 PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v1")

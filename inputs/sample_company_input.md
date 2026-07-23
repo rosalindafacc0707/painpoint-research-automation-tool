@@ -1,7 +1,7 @@
 # Prospect Intake — [Nome Azienda]
 
 ## Campo obbligatorio
-- **Nome azienda**:
+- **Company Name**:
 
 ## Campi opzionali
 - Sito web:

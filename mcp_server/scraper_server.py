@@ -8,10 +8,10 @@ Exposes two tools:
                         key required.
 
 Which tools a given run actually uses depends on the provider (see
-providers/anthropic_provider.py and providers/opensource_provider.py):
+providers/anthropic_provider.py and providers/azure_provider.py):
   - Anthropic provider: uses Claude's own server-side `web_search` tool for
     discovery, and only calls `fetch_url` here to read the full page.
-  - Open-source provider (e.g. GPT-OSS via Ollama): has no built-in web
+  - Azure provider (Azure OpenAI / Azure AI Foundry): has no built-in web
     search, so it uses BOTH `web_search_ddg` (discovery) and `fetch_url`
     (reading) from this server.
 
@@ -48,10 +48,10 @@ mcp = FastMCP("web-scraper")
 def web_search_ddg(query: str, max_results: int = 8) -> str:
     """Search the web and return candidate result titles, URLs, and snippets.
 
-    Only needed for providers without a built-in web search tool (e.g. an
-    open-source model). Use this to DISCOVER sources; after finding a
-    promising URL here, use fetch_url to read its full content before you
-    quote or cite it — never cite a page you have only seen as a snippet.
+    Only needed for providers without a built-in web search tool (e.g. Azure
+    OpenAI). Use this to DISCOVER sources; after finding a promising URL
+    here, use fetch_url to read its full content before you quote or cite
+    it — never cite a page you have only seen as a snippet.
 
     Args:
         query: The search query.
