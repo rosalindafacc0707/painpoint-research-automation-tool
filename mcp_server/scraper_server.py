@@ -3,9 +3,10 @@
 MCP server (stdio) — Research tools for the FFD Pain-Point Research Agent.
 
 Exposes two tools:
-  - fetch_url        — reads the full text of a known URL (httpx + trafilatura).
-  - web_search_ddg    — discovers candidate source URLs via DuckDuckGo, no API
-                        key required.
+  - fetch_url        — reads the full text of a known URL (httpx + trafilatura
+                        for HTML, pypdf for PDF documents).
+  - web_search_ddg    — discovers candidate source URLs via a metasearch
+                        aggregator, no API key required.
 
 Which tools a given run actually uses depends on the provider (see
 providers/anthropic_provider.py and providers/azure_provider.py):
@@ -15,24 +16,49 @@ providers/anthropic_provider.py and providers/azure_provider.py):
     search, so it uses BOTH `web_search_ddg` (discovery) and `fetch_url`
     (reading) from this server.
 
+Both tools are `async def`, offloading their actual blocking work (network
+I/O, PDF/HTML parsing) onto a worker thread via `asyncio.to_thread`. FastMCP
+calls a *sync* `def` tool directly on the server's single event loop, which
+blocks it for the tool's whole duration — so with sync tools, even a client
+that fires several tool calls concurrently (see providers/*.py) ends up
+waiting on them one at a time server-side anyway. Making them `async def`
+and delegating the blocking part to a thread is what lets multiple in-flight
+calls actually overlap.
+
 Run standalone for a manual check:
     python mcp_server/scraper_server.py        # starts the stdio server (waits)
 
 Normally it is launched as a subprocess by scripts/run_prompt_test.py.
 """
 
+import asyncio
+import io
 import json
 
 import httpx
 import trafilatura
 from ddgs import DDGS
 from mcp.server.fastmcp import FastMCP
+from pypdf import PdfReader
 
 # Cap the extracted text so a single page cannot blow up the token budget.
 # ~20k chars is plenty for a press release / careers page / case study.
 MAX_CHARS = 20_000
 
+# Annual reports and investor decks can run to hundreds of pages; stop
+# reading pages once we're comfortably past MAX_CHARS rather than parsing
+# the whole document just to truncate it afterwards.
+MAX_PDF_PAGES = 60
+
 REQUEST_TIMEOUT = 20.0
+
+# ddgs (metasearch) tries every backend in this list per call. duckduckgo,
+# mojeek, and grokipedia were observed to fail 100% of the time in this
+# environment (self-signed-cert SSL error, HTTP 403, HTTP 502 respectively) —
+# excluding them cuts wasted round trips per search without losing coverage:
+# duckduckgo's own results come from the same underlying provider as yahoo,
+# which is kept.
+SEARCH_BACKENDS = "google,yandex,startpage,yahoo,wikipedia"
 
 # A realistic User-Agent avoids trivial bot blocks on many corporate sites.
 USER_AGENT = (
@@ -44,8 +70,13 @@ USER_AGENT = (
 mcp = FastMCP("web-scraper")
 
 
+def _search_sync(query: str, max_results: int) -> list[dict]:
+    with DDGS() as ddgs:
+        return list(ddgs.text(query, max_results=max_results, backend=SEARCH_BACKENDS))
+
+
 @mcp.tool()
-def web_search_ddg(query: str, max_results: int = 8) -> str:
+async def web_search_ddg(query: str, max_results: int = 8) -> str:
     """Search the web and return candidate result titles, URLs, and snippets.
 
     Only needed for providers without a built-in web search tool (e.g. Azure
@@ -58,8 +89,7 @@ def web_search_ddg(query: str, max_results: int = 8) -> str:
         max_results: Maximum number of results to return (default 8).
     """
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
+        results = await asyncio.to_thread(_search_sync, query, max_results)
     except Exception as exc:  # noqa: BLE001 - surface any backend error to the model
         return f"ERROR: web search failed for query {query!r}: {exc}"
 
@@ -75,37 +105,39 @@ def web_search_ddg(query: str, max_results: int = 8) -> str:
     return "\n\n".join(lines)
 
 
-@mcp.tool()
-def fetch_url(url: str) -> str:
-    """Fetch a single web page and return its main readable text.
+def _download_sync(url: str) -> httpx.Response:
+    with httpx.Client(
+        follow_redirects=True,
+        timeout=REQUEST_TIMEOUT,
+        headers={"User-Agent": USER_AGENT},
+    ) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        return response
 
-    Use this AFTER web_search has surfaced a promising source URL, to read the
-    full content of that page (press releases, investor/annual reports, case
-    studies, job postings, news articles) so you can quote and cite it. Returns
-    the page title and publication date when detectable — use them for the
-    inline citation format required by the system prompt.
 
-    Args:
-        url: The absolute URL of the page to fetch (must start with http/https).
-    """
-    if not url.lower().startswith(("http://", "https://")):
-        return f"ERROR: not a valid absolute URL: {url!r}"
+def _is_pdf(response: httpx.Response) -> bool:
+    content_type = response.headers.get("content-type", "").lower()
+    return "application/pdf" in content_type or str(response.url).lower().split("?")[0].endswith(".pdf")
 
-    try:
-        with httpx.Client(
-            follow_redirects=True,
-            timeout=REQUEST_TIMEOUT,
-            headers={"User-Agent": USER_AGENT},
-        ) as client:
-            response = client.get(url)
-            response.raise_for_status()
-            html = response.text
-            final_url = str(response.url)
-    except httpx.HTTPStatusError as exc:
-        return f"ERROR: HTTP {exc.response.status_code} while fetching {url}"
-    except httpx.HTTPError as exc:
-        return f"ERROR: could not fetch {url}: {exc}"
 
+def _extract_pdf_sync(data: bytes) -> tuple[str, str]:
+    """Returns (title, text). Stops early once well past MAX_CHARS worth of text."""
+    reader = PdfReader(io.BytesIO(data))
+    title = (reader.metadata and reader.metadata.title) or ""
+    chunks = []
+    total_len = 0
+    for page in reader.pages[:MAX_PDF_PAGES]:
+        page_text = page.extract_text() or ""
+        chunks.append(page_text)
+        total_len += len(page_text)
+        if total_len > MAX_CHARS * 1.2:
+            break
+    return title, "\n\n".join(chunks)
+
+
+def _extract_html_sync(html: str) -> tuple[str, str, str]:
+    """Returns (title, date, text)."""
     extracted = trafilatura.extract(
         html,
         output_format="json",
@@ -114,21 +146,54 @@ def fetch_url(url: str) -> str:
         include_tables=True,
         favor_precision=True,
     )
+    if not extracted:
+        return "", "", ""
+    data = json.loads(extracted)
+    return data.get("title") or "", data.get("date") or "", data.get("text") or ""
 
-    title = ""
+
+@mcp.tool()
+async def fetch_url(url: str) -> str:
+    """Fetch a single web page or PDF and return its main readable text.
+
+    Use this AFTER web_search has surfaced a promising source URL, to read the
+    full content of that page (press releases, investor/annual reports, case
+    studies, job postings, news articles — HTML or PDF) so you can quote and
+    cite it. Returns the page title and publication date when detectable — use
+    them for the inline citation format required by the system prompt.
+
+    Args:
+        url: The absolute URL of the page to fetch (must start with http/https).
+    """
+    if not url.lower().startswith(("http://", "https://")):
+        return f"ERROR: not a valid absolute URL: {url!r}"
+
+    try:
+        response = await asyncio.to_thread(_download_sync, url)
+    except httpx.HTTPStatusError as exc:
+        return f"ERROR: HTTP {exc.response.status_code} while fetching {url}"
+    except httpx.HTTPError as exc:
+        return f"ERROR: could not fetch {url}: {exc}"
+
+    final_url = str(response.url)
     date = ""
-    text = ""
-    if extracted:
-        data = json.loads(extracted)
-        title = data.get("title") or ""
-        date = data.get("date") or ""
-        text = data.get("text") or ""
+
+    if _is_pdf(response):
+        try:
+            title, text = await asyncio.to_thread(_extract_pdf_sync, response.content)
+        except Exception as exc:  # noqa: BLE001 - a malformed/scanned-image PDF shouldn't crash the run
+            return (
+                f"WARNING: fetched {final_url} but could not parse it as a PDF ({exc}). "
+                "Do not cite this URL as evidence."
+            )
+    else:
+        title, date, text = await asyncio.to_thread(_extract_html_sync, response.text)
 
     if not text:
         return (
             f"WARNING: fetched {final_url} but could not extract readable "
-            "main-text content (the page may be JavaScript-rendered or empty). "
-            "Do not cite this URL as evidence."
+            "main-text content (the page may be JavaScript-rendered, a scanned-image "
+            "PDF, or empty). Do not cite this URL as evidence."
         )
 
     truncated = len(text) > MAX_CHARS

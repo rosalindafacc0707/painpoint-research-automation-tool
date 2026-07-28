@@ -34,6 +34,7 @@ Required config (see config.py / .env / .env.development):
                               Foundry (NOT the base model name)
 """
 
+import asyncio
 import json
 import sys
 
@@ -122,15 +123,23 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
             # Keep the full turn (including any message/reasoning items) in
             # the conversation before appending our tool results.
             input_items.extend(item.model_dump(exclude_none=True) for item in response.output)
-            for call in function_calls:
+
+            async def _run(call):
                 args = json.loads(call.arguments or "{}")
                 print(f"  → tool: {call.name}({args})", file=sys.stderr)
                 result = await session.call_tool(call.name, args)
+                return call.call_id, _tool_result_text(result)
+
+            # The model may request several independent tool calls in the
+            # same turn (e.g. multiple searches, or reading several URLs) —
+            # run them concurrently instead of awaiting one at a time.
+            outputs = await asyncio.gather(*(_run(call) for call in function_calls))
+            for call_id, output in outputs:
                 input_items.append(
                     {
                         "type": "function_call_output",
-                        "call_id": call.call_id,
-                        "output": _tool_result_text(result),
+                        "call_id": call_id,
+                        "output": output,
                     }
                 )
             continue

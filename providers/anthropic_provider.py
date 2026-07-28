@@ -7,6 +7,7 @@ same MCP server) is NOT exposed here: Claude already has a built-in search
 tool, so it isn't needed on this path.
 """
 
+import asyncio
 import sys
 
 import anthropic
@@ -64,20 +65,23 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
             # Client-side tool calls (the MCP fetch_url tool). Server-side
             # web_search results are already inline in response.content.
             messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    print(f"  → fetch tool: {block.name}({block.input})", file=sys.stderr)
-                    result = await session.call_tool(block.name, dict(block.input))
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": _tool_result_text(result),
-                            "is_error": bool(result.isError),
-                        }
-                    )
-            messages.append({"role": "user", "content": tool_results})
+
+            async def _run(block):
+                print(f"  → fetch tool: {block.name}({block.input})", file=sys.stderr)
+                result = await session.call_tool(block.name, dict(block.input))
+                return {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": _tool_result_text(result),
+                    "is_error": bool(result.isError),
+                }
+
+            # Claude often issues several fetch_url calls in the same turn
+            # (e.g. reading multiple sources to triangulate) — run them
+            # concurrently instead of awaiting one at a time.
+            tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+            tool_results = await asyncio.gather(*(_run(block) for block in tool_use_blocks))
+            messages.append({"role": "user", "content": list(tool_results)})
             continue
 
         if response.stop_reason == "pause_turn":
