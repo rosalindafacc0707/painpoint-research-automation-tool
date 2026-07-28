@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fieldnotes — CVC pain-point research</title>
+<title>PainScout - CVC pain-points research automation</title>
 
 <script src="https://unpkg.com/lucide@latest"></script>
 <script>
@@ -178,7 +178,7 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
 <div class="app">
 
   <aside class="sidebar">
-    <div class="brand"><span class="dot"></span>Fieldnotes</div>
+    <div class="brand"><span class="dot"></span>PainScout</div>
     <button type="button" class="btn btn-secondary btn-block" id="btn-new"><i data-lucide="plus" style="width:15px;height:15px"></i>New research</button>
     <div class="history-label">History</div>
     <div class="history-list" id="history-list"></div>
@@ -192,12 +192,12 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
         <div class="hero">
           <span class="kicker">CVC pain-point research</span>
           <h1>Turn a company name into a sales-ready pain-point brief.</h1>
-          <p class="sub">Give it a company. It researches Content Value Chain friction across the six CVC steps — briefing to optimisation — and hands back a structured, reviewable report.</p>
+          <p class="sub">Give me a company. I research Content Value Chain's friction across the six CVC steps — briefing to optimisation — and hands back a structured, reviewable report.</p>
         </div>
         <div class="form-card">
           <div class="field">
             <label for="in-company">Company name <span style="color:var(--color-accent-700)">*</span></label>
-            <input class="input" id="in-company" type="text" placeholder="e.g. Just Eat Takeaway.com">
+            <input class="input" id="in-company" type="text" placeholder="e.g. FullForce.digital">
           </div>
           <button type="button" class="optional-toggle" id="toggle-optional"><i data-lucide="chevron-right" id="toggle-icon" style="width:14px;height:14px"></i>Add optional details</button>
           <div class="optional-fields" id="optional-fields">
@@ -216,7 +216,7 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
             </div>
           </div>
           <button type="button" class="btn btn-primary btn-block" id="btn-run" style="min-height:44px;font-size:15px"><i data-lucide="search" style="width:16px;height:16px"></i>Run research</button>
-          <div class="rule-note"><i data-lucide="info" style="width:14px;height:14px"></i><span>One company per run. Every report needs human review before it reaches sales — nothing here is sent to a CRM. Calls <code id="api-base-label"></code><code>/painpoint-researcher/generate-pain-point-md</code>.</span></div>
+          <div class="rule-note"><i data-lucide="info" style="width:14px;height:14px"></i><span>One company per run. Every report needs human review — nothing here is sent to a CRM.</span></div>
         </div>
       </section>
 
@@ -260,19 +260,18 @@ const RESEARCH_TOPICS = ["Marketing transformation programs","Content workflow a
 
 function slug(s){ return s.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'company'; }
 
-// Matches inline citations the report writes as
-// [Source: <optional descriptor,> "Article title," Publisher, YYYY-MM-DD, https://full/url]
-// — the descriptor before the quoted title is optional and varies run to
-// run (e.g. "IBM case study, ") — and turns the article title into the
-// link, dropping the raw URL text.
-const SOURCE_CITATION_RE = /\[Source:\s*([^"\]]*?)"([^"]+)"([^\]]*?)\s*,\s*(https?:\/\/[^\s\]]+)\]/gi;
+// Matches inline citations the report writes as standard Markdown links:
+// [Source: <Type>, "Article title," Publisher, YYYY-MM-DD](https://full/url)
+// — the entire bracketed label becomes the clickable link text, and the
+// raw URL is never shown.
+const SOURCE_CITATION_RE = /\[(Source:[^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi;
 
 function escapeAttr(s){ return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 
 function linkifySourceCitations(s){
-  return s.replace(SOURCE_CITATION_RE, (match, prefix, title, meta, url) => {
+  return s.replace(SOURCE_CITATION_RE, (match, label, url) => {
     const href = escapeAttr(url);
-    return `[Source: ${prefix}<a href="${href}" target="_blank" rel="noopener noreferrer">"${title}"</a>${meta}]`;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">[${label}]</a>`;
   });
 }
 

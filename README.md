@@ -89,8 +89,8 @@ ffd-painpoint-research/
    `.docx` corrispondente (stesso nome base), generato da
    `services/docx_export.py` — heading, elenchi, tabelle, grassetto/corsivo
    e le citazioni `[Source: ...]` (queste ultime come hyperlink veri e
-   propri sul titolo dell'articolo, senza mostrare l'URL) vengono convertiti
-   in un vero documento Word, non solo un export testuale.
+   propri sull'intero blocco tra parentesi quadre, senza mostrare l'URL)
+   vengono convertiti in un vero documento Word, non solo un export testuale.
 
 ## Switch di provider: Anthropic vs Azure OpenAI
 

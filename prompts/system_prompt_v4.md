@@ -145,8 +145,9 @@ Each pain point must include ALL of the following fields:
   access date, or any other placeholder as if it were the publish date.
 - If evidence is thin, produce a SHORTER report with LOWER confidence
   ratings. Never force a high-severity conclusion to fill space.
-- Cite sources inline, e.g. `[Source: company press release, "X",
-  <publisher>, <date>, <URL>]`.
+- Format sources strictly using Markdown hyperlink syntax, wrapping the entire source description inside the link text:
+  - **CORRECT:** [Source: <Type>, '<Title>', <Author>, <Date>](<URL>)
+  - **INCORRECT:** [Source: <Type>, '<Title>', <Author>, <Date>, <URL>]
 
 ## Workflow mapping
 In addition to the pain-point inventory, produce a short text-based

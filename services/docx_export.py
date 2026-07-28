@@ -2,7 +2,7 @@
 
 Handles the subset of markdown the system prompt actually produces: ATX
 headings, bullet/numbered lists, blockquotes, pipe tables, bold/italic/code
-spans, and the `[Source: "Title," Publisher, Date, https://url]` inline
+spans, and the `[Source: "Title," Publisher, Date](https://url)` inline
 citations (turned into real Word hyperlinks, same as the frontend does for
 the browser view) — not a general-purpose markdown parser.
 """
@@ -18,7 +18,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, RGBColor
 
 SOURCE_CITATION_RE = re.compile(
-    r'\[Source:\s*([^"\]]*?)"([^"]+)"([^\]]*?)\s*,\s*(https?://[^\s\]]+)\]', re.IGNORECASE
+    r'\[(Source:[^\]]+)\]\((https?://[^\s)]+)\)', re.IGNORECASE
 )
 INLINE_TOKEN_RE = re.compile(r"(\*\*.+?\*\*|(?<!\*)\*(?!\*).+?(?<!\*)\*(?!\*)|`[^`]+`)")
 HEADING_RE = re.compile(r"^(#{1,4})\s+(.*)")
@@ -81,15 +81,8 @@ def _add_inline_runs(paragraph, text: str) -> None:
     pos = 0
     for match in SOURCE_CITATION_RE.finditer(text):
         _add_plain_inline(paragraph, text[pos : match.start()])
-        prefix, title, meta, url = (
-            match.group(1),
-            match.group(2),
-            match.group(3),
-            match.group(4),
-        )
-        paragraph.add_run(f"[Source: {prefix}")
-        _add_hyperlink(paragraph, url, f'"{title}"')
-        paragraph.add_run(f"{meta}]")
+        label, url = match.group(1), match.group(2)
+        _add_hyperlink(paragraph, url, f"[{label}]")
         pos = match.end()
     _add_plain_inline(paragraph, text[pos:])
 
