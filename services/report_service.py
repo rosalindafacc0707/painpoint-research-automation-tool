@@ -17,6 +17,7 @@ from mcp.client.stdio import stdio_client
 
 from config import ANTHROPIC_API_KEY, PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH
 from schemas.requests import GenerateMdDocRequest
+from services.docx_export import markdown_to_docx
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRAPER_SERVER = ROOT / "mcp_server" / "scraper_server.py"
@@ -83,11 +84,17 @@ async def generate_pain_point_report(request: GenerateMdDocRequest) -> dict:
     company_slug = _slugify(request.company_name)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     OUTPUTS_DIR.mkdir(exist_ok=True)
-    filename = f"{company_slug}_{PROMPT_VERSION}_{provider}_{timestamp}.md"
+    base_name = f"{company_slug}_{PROMPT_VERSION}_{provider}_{timestamp}"
+
+    filename = f"{base_name}.md"
     (OUTPUTS_DIR / filename).write_text(result.text, encoding="utf-8")
+
+    docx_filename = f"{base_name}.docx"
+    markdown_to_docx(result.text).save(OUTPUTS_DIR / docx_filename)
 
     return {
         "filename": filename,
+        "docx_filename": docx_filename,
         "company": request.company_name,
         "provider": provider,
         "model": result.model,

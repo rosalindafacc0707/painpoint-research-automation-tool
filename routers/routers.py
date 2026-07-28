@@ -7,6 +7,11 @@ from services.report_service import OUTPUTS_DIR, generate_pain_point_report
 
 router = APIRouter(prefix="/painpoint-researcher", tags=["research"])
 
+MEDIA_TYPES = {
+    ".md": "text/markdown",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
 
 @router.post("/generate-pain-point-md", response_model=GenerateMdDocResponse)
 async def generate(body: GenerateMdDocRequest):
@@ -18,6 +23,7 @@ async def generate(body: GenerateMdDocRequest):
     return GenerateMdDocResponse(
         **result,
         download_url=f"/painpoint-researcher/download/{result['filename']}",
+        docx_download_url=f"/painpoint-researcher/download/{result['docx_filename']}",
     )
 
 
@@ -27,8 +33,9 @@ async def download(filename: str):
     if file_path.parent != OUTPUTS_DIR.resolve() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found.")
 
+    media_type = MEDIA_TYPES.get(file_path.suffix.lower(), "application/octet-stream")
     return FileResponse(
         path=file_path,
-        media_type="text/markdown",
+        media_type=media_type,
         filename=filename,
     )

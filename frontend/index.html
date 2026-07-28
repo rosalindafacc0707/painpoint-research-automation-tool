@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fieldnotes — CVC pain-point research</title>
+
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>
+  // Same origin (served by `uvicorn main:app`) -> use it directly.
+  // Opened as a plain file:// page instead -> fall back to the default
+  // local dev address. Override by setting window.RESEARCH_API_BASE
+  // before this script runs, or editing the fallback below.
+  window.RESEARCH_API_BASE = window.RESEARCH_API_BASE ||
+    (location.protocol.startsWith('http') ? location.origin : 'http://localhost:8000');
+</script>
+
+<style>
+:root{
+  --sb-w: 280px;
+  --color-bg: #fdf8f1;
+  --color-surface: #ffffff;
+  --color-text: #2b211b;
+  --color-divider: #e8ddcf;
+  --color-neutral-100: #f5ede1;
+  --color-neutral-200: #ece0d0;
+  --color-neutral-300: #ddccb4;
+  --color-neutral-900: #241a13;
+  --color-accent: #c67139;
+  --color-accent-100: #f7e4d3;
+  --color-accent-300: #e3ac80;
+  --color-accent-700: #9c5326;
+  --color-accent-800: #7c4019;
+  --color-accent-2-100: #e4efe4;
+  --color-accent-2-200: #cfe4cf;
+  --color-accent-2-300: #b0d3b0;
+  --color-accent-2-600: #5e9264;
+  --color-accent-2-800: #33552f;
+  --font-heading: Georgia, 'Times New Roman', serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 14px rgba(0,0,0,0.14);
+}
+html,body{ margin:0; height:100%; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); }
+body{ overflow:hidden; }
+*{ box-sizing:border-box; }
+h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
+.app{ display:flex; height:100vh; }
+
+/* — base controls (no external design system here, so these are hand-rolled) — */
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:var(--font-body);
+  font-size:13.5px; font-weight:600; padding:10px 16px; border-radius:var(--radius-md); border:1px solid transparent;
+  cursor:pointer; transition:background .15s,border-color .15s; }
+.btn-block{ width:100%; }
+.btn-primary{ background:var(--color-accent); color:#fff; }
+.btn-primary:hover{ background:var(--color-accent-700); }
+.btn-secondary{ background:var(--color-neutral-100); color:var(--color-text); border-color:var(--color-divider); }
+.btn-secondary:hover{ background:var(--color-neutral-200); }
+.input, select.input{ width:100%; font-family:var(--font-body); font-size:14px; padding:10px 12px;
+  border-radius:var(--radius-md); border:1px solid var(--color-divider); background:var(--color-surface);
+  color:var(--color-text); }
+.input:focus, select.input:focus{ outline:none; border-color:var(--color-accent); }
+.table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+.table th, .table td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--color-divider); }
+.table th{ color:color-mix(in srgb, var(--color-text) 60%, transparent); font-weight:600; }
+
+/* — sidebar — */
+.sidebar{ width:var(--sb-w); flex:none; background:var(--color-surface); display:flex; flex-direction:column;
+  padding:var(--space-4); gap:var(--space-4); overflow-y:auto; border-right:1px solid var(--color-divider); }
+.brand{ display:flex; align-items:center; gap:8px; font-family:var(--font-heading); font-size:19px; }
+.brand .dot{ width:14px; height:14px; border-radius:50%; background:var(--color-accent); flex:none; }
+.history-label{ font-size:11px; letter-spacing:0.08em; text-transform:uppercase; font-weight:600;
+  color:color-mix(in srgb, var(--color-text) 55%, transparent); margin:var(--space-2) 0 0; }
+.history-list{ display:flex; flex-direction:column; gap:6px; }
+.history-item{ display:flex; flex-direction:column; gap:2px; text-align:left; cursor:pointer;
+  border:1px solid transparent; background:var(--color-neutral-100); border-radius:var(--radius-md);
+  padding:10px 12px; font-family:var(--font-body); }
+.history-item:hover{ background:var(--color-neutral-200); }
+.history-item.active{ background:var(--color-accent-100); border-color:var(--color-accent-300); }
+.history-item .hi-name{ font-size:13.5px; font-weight:600; color:var(--color-text); }
+.history-item .hi-meta{ font-size:11px; color:color-mix(in srgb, var(--color-text) 55%, transparent); }
+.history-empty{ font-size:12.5px; font-style:italic; color:color-mix(in srgb, var(--color-text) 55%, transparent);
+  padding:8px 2px; }
+
+/* — main — */
+.main{ flex:1; overflow-y:auto; position:relative; }
+.container{ max-width:880px; margin:0 auto; padding:var(--space-8) var(--space-6) calc(var(--space-8) * 2); }
+.view{ display:none; }
+.view.active{ display:block; }
+
+/* — intake — */
+.hero{ position:relative; padding-top:var(--space-4); }
+.hero::before{ content:""; position:absolute; right:-40px; top:-30px; width:220px; height:220px;
+  border-radius:50%; background:var(--color-accent-2-200); z-index:-1; opacity:0.7; }
+.kicker{ display:block; font-size:12.5px; letter-spacing:0.08em; text-transform:uppercase; font-weight:600;
+  color:var(--color-accent-700); margin:0 0 8px; }
+.hero h1{ font-size:clamp(32px,4vw,44px); line-height:1.1; margin:0 0 12px; max-width:20ch; }
+.hero .sub{ font-size:16px; max-width:56ch; color:color-mix(in srgb, var(--color-text) 78%, transparent);
+  margin:0 0 var(--space-6); }
+.form-card{ background:var(--color-neutral-100); border-radius:var(--radius-lg); padding:var(--space-6);
+  box-shadow:var(--shadow-sm); }
+.field{ margin-bottom:var(--space-3); }
+.field label{ display:block; font-size:12px; margin-bottom:5px; color:color-mix(in srgb, var(--color-text) 70%, transparent); }
+.field-row{ display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+.optional-toggle{ display:flex; align-items:center; gap:6px; margin:var(--space-2) 0 var(--space-3);
+  font-size:13.5px; color:var(--color-accent-700); cursor:pointer; background:none; border:none; padding:0;
+  font-family:var(--font-body); font-weight:600; }
+.optional-fields{ display:none; grid-template-columns:1fr 1fr; gap:var(--space-3); margin-bottom:var(--space-3); }
+.optional-fields.open{ display:grid; }
+.rule-note{ display:flex; gap:8px; align-items:flex-start; font-size:12.5px; margin-top:var(--space-4);
+  color:color-mix(in srgb, var(--color-text) 62%, transparent); }
+.rule-note svg{ flex:none; margin-top:1px; }
+.rule-note code{ background:var(--color-neutral-200); padding:1px 6px; border-radius:6px; }
+
+/* — progress — */
+.progress-wrap{ display:grid; grid-template-columns:220px 1fr; gap:var(--space-6); align-items:start; }
+.steps{ display:flex; flex-direction:column; gap:0; }
+.step{ display:flex; gap:10px; align-items:flex-start; position:relative; padding-bottom:22px; }
+.step:last-child{ padding-bottom:0; }
+.step::before{ content:""; position:absolute; left:10px; top:22px; bottom:0; width:2px;
+  background:var(--color-neutral-300); }
+.step:last-child::before{ display:none; }
+.step-dot{ width:22px; height:22px; border-radius:50%; flex:none; display:grid; place-content:center;
+  background:var(--color-neutral-300); color:var(--color-bg); z-index:1; transition:background .25s; }
+.step.active .step-dot{ background:var(--color-accent); animation:pulse 1.1s ease-in-out infinite; }
+.step.done .step-dot{ background:var(--color-accent-2-600); }
+.step-label{ font-size:13px; padding-top:2px; color:color-mix(in srgb, var(--color-text) 60%, transparent); }
+.step.active .step-label, .step.done .step-label{ color:var(--color-text); font-weight:600; }
+@keyframes pulse{ 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent);} 50%{ box-shadow:0 0 0 6px color-mix(in srgb, var(--color-accent) 0%, transparent);} }
+.console{ background:var(--color-neutral-900); color:var(--color-neutral-100); border-radius:var(--radius-md);
+  padding:var(--space-4); height:360px; overflow-y:auto; font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:12.5px; line-height:1.7; box-shadow:var(--shadow-md); }
+.console .ln{ opacity:0; animation:fadeIn .25s forwards; margin-bottom:2px; }
+.console .ln.q{ color:var(--color-accent-300); }
+.console .ln.ok{ color:#cdeab0; }
+@keyframes fadeIn{ to{ opacity:1; } }
+.progress-bar{ margin-top:var(--space-4); height:8px; border-radius:999px; background:var(--color-neutral-300);
+  overflow:hidden; }
+.progress-bar-fill{ height:100%; background:var(--color-accent); border-radius:999px; width:0%;
+  transition:width .3s ease; }
+
+/* — report — */
+.report-bar{ display:flex; align-items:center; gap:var(--space-3); justify-content:space-between;
+  position:sticky; top:0; background:var(--color-bg); padding:var(--space-3) 0; z-index:2; }
+.report-bar h2{ font-size:20px; margin:0; }
+.report-bar .actions{ display:flex; gap:8px; flex:none; }
+.info-banner{ display:flex; gap:10px; align-items:flex-start; background:var(--color-accent-2-100);
+  border-radius:var(--radius-md); padding:var(--space-3); font-size:13px; margin-bottom:var(--space-3);
+  color:var(--color-accent-2-800); }
+.info-banner code{ background:rgba(255,255,255,0.6); padding:1px 6px; border-radius:6px; }
+.warn-banner{ display:flex; gap:10px; align-items:flex-start; background:var(--color-accent-100);
+  border-radius:var(--radius-md); padding:var(--space-3); font-size:13px; margin-bottom:var(--space-6);
+  color:var(--color-accent-800); }
+.info-banner svg, .warn-banner svg{ flex:none; margin-top:1px; }
+.section{ margin-bottom:var(--space-8); }
+.section h3{ font-size:20px; margin:0 0 var(--space-3); }
+.section-kicker{ font-size:11px; letter-spacing:0.08em; text-transform:uppercase; font-weight:600;
+  color:var(--color-accent-700); margin-bottom:4px; }
+.summary-list{ margin:0; padding-left:20px; display:flex; flex-direction:column; gap:8px; font-size:14.5px; }
+.section a{ color:var(--color-accent-700); text-decoration:underline; text-decoration-color:var(--color-accent-300); }
+.section a:hover{ color:var(--color-accent-800); }
+
+@media (max-width:760px){
+  .sidebar{ display:none; }
+  .field-row, .optional-fields{ grid-template-columns:1fr; }
+  .progress-wrap{ grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span>Fieldnotes</div>
+    <button type="button" class="btn btn-secondary btn-block" id="btn-new"><i data-lucide="plus" style="width:15px;height:15px"></i>New research</button>
+    <div class="history-label">History</div>
+    <div class="history-list" id="history-list"></div>
+  </aside>
+
+  <main class="main">
+    <div class="container">
+
+      <!-- INTAKE -->
+      <section class="view active" id="view-intake">
+        <div class="hero">
+          <span class="kicker">CVC pain-point research</span>
+          <h1>Turn a company name into a sales-ready pain-point brief.</h1>
+          <p class="sub">Give it a company. It researches Content Value Chain friction across the six CVC steps — briefing to optimisation — and hands back a structured, reviewable report.</p>
+        </div>
+        <div class="form-card">
+          <div class="field">
+            <label for="in-company">Company name <span style="color:var(--color-accent-700)">*</span></label>
+            <input class="input" id="in-company" type="text" placeholder="e.g. Just Eat Takeaway.com">
+          </div>
+          <button type="button" class="optional-toggle" id="toggle-optional"><i data-lucide="chevron-right" id="toggle-icon" style="width:14px;height:14px"></i>Add optional details</button>
+          <div class="optional-fields" id="optional-fields">
+            <div class="field"><label>Website</label><input class="input" id="in-website" type="text" placeholder="company.com"></div>
+            <div class="field"><label>Country / region</label><input class="input" id="in-region" type="text" placeholder="e.g. EMEA"></div>
+            <div class="field"><label>Department / business unit</label><input class="input" id="in-dept" type="text" placeholder="e.g. Global Marketing"></div>
+            <div class="field"><label>Industry</label><input class="input" id="in-industry" type="text" placeholder="e.g. Food delivery"></div>
+            <div class="field" style="grid-column:1/-1"><label>Specific research lens</label><input class="input" id="in-lens" type="text" placeholder="Default: Content Value Chain / Marketing Operations"></div>
+            <div class="field" style="grid-column:1/-1">
+              <label>Provider</label>
+              <select class="input" id="in-provider">
+                <option value="">Server default (config.py PROVIDER)</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="azure">Azure OpenAI</option>
+              </select>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary btn-block" id="btn-run" style="min-height:44px;font-size:15px"><i data-lucide="search" style="width:16px;height:16px"></i>Run research</button>
+          <div class="rule-note"><i data-lucide="info" style="width:14px;height:14px"></i><span>One company per run. Every report needs human review before it reaches sales — nothing here is sent to a CRM. Calls <code id="api-base-label"></code><code>/painpoint-researcher/generate-pain-point-md</code>.</span></div>
+        </div>
+      </section>
+
+      <!-- PROGRESS -->
+      <section class="view" id="view-progress">
+        <span class="kicker" id="progress-kicker">Researching</span>
+        <h1 style="font-size:28px;margin:0 0 var(--space-6)">Reading up on <span id="progress-company"></span>…</h1>
+        <div class="progress-wrap">
+          <div>
+            <div class="steps" id="steps-list"></div>
+          </div>
+          <div>
+            <div class="console" id="console"></div>
+            <div id="progress-error" style="display:none;margin-top:12px;font-size:13px;color:var(--color-accent-800);background:var(--color-accent-100);padding:10px 14px;border-radius:var(--radius-md)"></div>
+            <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- REPORT -->
+      <section class="view" id="view-report">
+        <div class="report-bar">
+          <h2 id="report-title">Report</h2>
+          <div class="actions">
+            <button type="button" class="btn btn-secondary" id="btn-new-2"><i data-lucide="plus" style="width:14px;height:14px"></i>New</button>
+            <button type="button" class="btn btn-primary" id="btn-download"><i data-lucide="download" style="width:14px;height:14px"></i>Download .docx</button>
+          </div>
+        </div>
+        <div id="report-body"></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+// Cosmetic only: the backend is one synchronous call with no progress
+// events, so this list just gives the user something to look at while
+// generate-pain-point-md is running.
+const RESEARCH_TOPICS = ["Marketing transformation programs","Content workflow and operating model","Governance and brand control","Global rollout / global-to-local model","Embedded teams and organisation structure","Data ownership","Brand integrity","AI in marketing"];
+
+function slug(s){ return s.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'company'; }
+
+// Matches inline citations the report writes as
+// [Source: <optional descriptor,> "Article title," Publisher, YYYY-MM-DD, https://full/url]
+// — the descriptor before the quoted title is optional and varies run to
+// run (e.g. "IBM case study, ") — and turns the article title into the
+// link, dropping the raw URL text.
+const SOURCE_CITATION_RE = /\[Source:\s*([^"\]]*?)"([^"]+)"([^\]]*?)\s*,\s*(https?:\/\/[^\s\]]+)\]/gi;
+
+function escapeAttr(s){ return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function linkifySourceCitations(s){
+  return s.replace(SOURCE_CITATION_RE, (match, prefix, title, meta, url) => {
+    const href = escapeAttr(url);
+    return `[Source: ${prefix}<a href="${href}" target="_blank" rel="noopener noreferrer">"${title}"</a>${meta}]`;
+  });
+}
+
+function inlineMd(s){
+  return linkifySourceCitations(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g,'<em>$1</em>').replace(/`([^`]+)`/g,'<code style="background:var(--color-neutral-200);padding:1px 5px;border-radius:6px;font-size:0.92em">$1</code>');
+}
+
+function mdToHtml(md){
+  const lines = md.replace(/\r\n/g,'\n').split('\n');
+  let html = '', inList=false, listType='', inTable=false, tableRows=[];
+  function closeList(){ if(inList){ html += `</${listType}>`; inList=false; } }
+  function closeTable(){
+    if(inTable){
+      const [head,...rows] = tableRows;
+      html += '<div style="overflow-x:auto"><table class="table"><thead><tr>' + head.map(c=>`<th>${inlineMd(c)}</th>`).join('') + '</tr></thead><tbody>';
+      rows.forEach(r=>{ html += '<tr>' + r.map(c=>`<td>${inlineMd(c)}</td>`).join('') + '</tr>'; });
+      html += '</tbody></table></div>';
+      inTable=false; tableRows=[];
+    }
+  }
+  for(const line of lines){
+    if(/^\s*\|.*\|\s*$/.test(line)){
+      if(/^[\s|:\-]+$/.test(line)) continue;
+      const cells = line.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+      inTable=true; tableRows.push(cells); continue;
+    } else { closeTable(); }
+    if(/^#{1,4}\s/.test(line)){ closeList(); const level=line.match(/^#+/)[0].length; const text=line.replace(/^#{1,4}\s/,''); const tag='h'+Math.min(level+1,5); html+=`<${tag} class="section-kicker" style="font-size:${level<=2?'20px':'15px'};text-transform:none;letter-spacing:0;color:var(--color-text);margin-top:28px;font-family:var(--font-heading)">${inlineMd(text)}</${tag}>`; continue; }
+    if(/^>\s?/.test(line)){ html += `<blockquote style="border-left:3px solid var(--color-accent-300);padding-left:12px;color:color-mix(in srgb, var(--color-text) 70%, transparent);font-size:13.5px;margin:10px 0">${inlineMd(line.replace(/^>\s?/,''))}</blockquote>`; continue; }
+    if(/^\s*[-*]\s+/.test(line)){ if(!inList||listType!=='ul'){ closeList(); html+='<ul class="summary-list">'; inList=true; listType='ul'; } html+=`<li>${inlineMd(line.replace(/^\s*[-*]\s+/,''))}</li>`; continue; }
+    if(/^\s*\d+\.\s+/.test(line)){ if(!inList||listType!=='ol'){ closeList(); html+='<ol class="summary-list">'; inList=true; listType='ol'; } html+=`<li>${inlineMd(line.replace(/^\s*\d+\.\s+/,''))}</li>`; continue; }
+    if(/^\s*(---|\*\*\*)\s*$/.test(line)){ closeList(); html += '<div style="height:1px;background:var(--color-divider);margin:20px 0"></div>'; continue; }
+    if(line.trim()===''){ closeList(); continue; }
+    closeList();
+    html += `<p style="font-size:14.5px;line-height:1.6">${inlineMd(line)}</p>`;
+  }
+  closeList(); closeTable();
+  return html;
+}
+
+// Maps the intake form onto schemas.requests.GenerateMdDocRequest.
+function buildBackendPayload(input){
+  return {
+    company_name: input.company,
+    website: input.website || null,
+    country_region: input.region || null,
+    department: input.dept || null,
+    industry: input.industry || null,
+    research_lens: input.lens || null,
+    provider: input.provider || null,
+  };
+}
+
+async function extractError(res){
+  const text = await res.text().catch(()=>'');
+  try {
+    const data = JSON.parse(text);
+    if(data && data.detail) return `${res.status}: ${typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)}`;
+  } catch(e) { /* not JSON, fall through */ }
+  return `${res.status}${text ? ': ' + text.slice(0,200) : ''}`;
+}
+
+// POST /painpoint-researcher/generate-pain-point-md returns metadata + a
+// download_url — the report body itself is only readable from that second
+// endpoint (routers.py streams the .md file straight off disk), so this
+// takes two round trips.
+async function callBackend(input){
+  const genRes = await fetch(`${window.RESEARCH_API_BASE}/painpoint-researcher/generate-pain-point-md`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildBackendPayload(input)),
+  });
+  if(!genRes.ok) throw new Error(await extractError(genRes));
+  const meta = await genRes.json();
+
+  const mdRes = await fetch(`${window.RESEARCH_API_BASE}${meta.download_url}`);
+  if(!mdRes.ok) throw new Error(await extractError(mdRes));
+  const markdown = await mdRes.text();
+
+  return { meta, markdown };
+}
+
+function renderReportHTML(meta, markdown){
+  const info = `<div class="info-banner"><i data-lucide="info" style="width:16px;height:16px"></i><span>Generated via <strong>${meta.provider}</strong> · model <code>${meta.model}</code> · prompt <code>${meta.prompt_version}</code>. Saved server-side as <code>${meta.filename}</code>.</span></div>`;
+  const truncated = meta.truncated
+    ? `<div class="warn-banner"><i data-lucide="triangle-alert" style="width:16px;height:16px"></i><span>The model's response was truncated (stop reason: <code>${meta.stop_reason || 'unknown'}</code>) — review this report carefully before it goes any further.</span></div>`
+    : '';
+  return `${info}${truncated}<div class="section">${mdToHtml(markdown)}</div>`;
+}
+
+// — app state / views —
+const views = { intake:'view-intake', progress:'view-progress', report:'view-report' };
+function showView(name){ Object.values(views).forEach(id=>document.getElementById(id).classList.remove('active')); document.getElementById(views[name]).classList.add('active'); }
+
+const HKEY = 'fieldnotes_history';
+function loadHistory(){ try{ return JSON.parse(localStorage.getItem(HKEY))||[]; }catch(e){ return []; } }
+function saveHistory(h){ localStorage.setItem(HKEY, JSON.stringify(h.slice(0,25))); }
+let currentCompany = null;
+let currentDocxUrl = null;
+
+function docxUrlFor(meta){
+  return (meta && meta.docx_download_url) ? `${window.RESEARCH_API_BASE}${meta.docx_download_url}` : null;
+}
+
+function renderHistory(activeId){
+  const hist = loadHistory();
+  const list = document.getElementById('history-list');
+  if(!hist.length){ list.innerHTML = '<div class="history-empty">No runs yet — your first report will show up here.</div>'; return; }
+  list.innerHTML = hist.map(h=>`<div class="history-item ${h.id===activeId?'active':''}" data-id="${h.id}">
+      <span class="hi-name">${h.company}</span><span class="hi-meta">${h.date}</span></div>`).join('');
+  list.querySelectorAll('.history-item').forEach(el=>el.addEventListener('click', ()=>{
+    const h = hist.find(x=>x.id===el.dataset.id); if(!h) return;
+    currentCompany = h.company; currentDocxUrl = docxUrlFor(h.meta);
+    document.getElementById('report-title').textContent = `${h.company} — pain-point report`;
+    document.getElementById('report-body').innerHTML = renderReportHTML(h.meta || {}, h.markdown);
+    if(window.lucide) lucide.createIcons();
+    renderHistory(h.id);
+    showView('report');
+  }));
+}
+
+document.getElementById('toggle-optional').addEventListener('click', ()=>{
+  const el = document.getElementById('optional-fields');
+  const icon = document.getElementById('toggle-icon');
+  const open = el.classList.toggle('open');
+  icon.setAttribute('data-lucide', open ? 'chevron-down' : 'chevron-right');
+  if(window.lucide) lucide.createIcons();
+});
+
+function resetIntake(){
+  ['in-company','in-website','in-region','in-dept','in-industry','in-lens'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('in-provider').value = '';
+  showView('intake');
+}
+document.getElementById('btn-new').addEventListener('click', resetIntake);
+document.getElementById('btn-new-2').addEventListener('click', resetIntake);
+
+document.getElementById('btn-run').addEventListener('click', ()=>{
+  const company = document.getElementById('in-company').value.trim();
+  if(!company){ document.getElementById('in-company').focus(); document.getElementById('in-company').style.borderColor = 'var(--color-accent)'; return; }
+  const input = {
+    company,
+    website: document.getElementById('in-website').value.trim(),
+    region: document.getElementById('in-region').value.trim(),
+    dept: document.getElementById('in-dept').value.trim(),
+    industry: document.getElementById('in-industry').value.trim(),
+    lens: document.getElementById('in-lens').value.trim(),
+    provider: document.getElementById('in-provider').value,
+  };
+  runResearch(input);
+});
+
+function runResearch(input){
+  document.getElementById('progress-company').textContent = input.company;
+  document.getElementById('console').innerHTML = '';
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('progress-error').style.display = 'none';
+  const stepsList = document.getElementById('steps-list');
+  stepsList.innerHTML = RESEARCH_TOPICS.map((t,idx)=>`<div class="step" id="step-${idx}"><div class="step-dot"><i data-lucide="circle" style="width:11px;height:11px"></i></div><div class="step-label">${t}</div></div>`).join('');
+  if(window.lucide) lucide.createIcons();
+  showView('progress');
+
+  const total = RESEARCH_TOPICS.length;
+  let i = 0, settled = false;
+  const consoleEl = document.getElementById('console');
+  function log(text, cls){
+    const d = document.createElement('div'); d.className = 'ln '+(cls||''); d.textContent = text;
+    consoleEl.appendChild(d); consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+  function markDone(idx){
+    const el = document.getElementById('step-'+idx); if(!el) return;
+    el.classList.remove('active'); el.classList.add('done');
+    el.querySelector('.step-dot').innerHTML = '<i data-lucide="check" style="width:12px;height:12px"></i>';
+  }
+  function animate(){
+    if(settled || i >= total) return;
+    const topic = RESEARCH_TOPICS[i];
+    document.getElementById('step-'+i).classList.add('active');
+    log(`researching: ${topic.toLowerCase()}`, 'q');
+    setTimeout(()=>{
+      if(settled) return;
+      markDone(i);
+      if(window.lucide) lucide.createIcons();
+      i++;
+      document.getElementById('progress-fill').style.width = Math.round((i/total)*100)+'%';
+      log(`✓ ${topic} — noted`, 'ok');
+      animate();
+    }, 450 + Math.random()*350);
+  }
+  animate();
+
+  callBackend(input).then(({meta, markdown})=>{
+    settled = true;
+    for(let k=0;k<total;k++) markDone(k);
+    document.getElementById('progress-fill').style.width = '100%';
+    if(window.lucide) lucide.createIcons();
+    log('✓ report received from backend', 'ok');
+    const id = Date.now().toString(36);
+    const date = new Date().toISOString().slice(0,10);
+    const hist = loadHistory();
+    hist.unshift({ id, company:input.company, date, markdown, meta });
+    saveHistory(hist);
+    currentCompany = input.company; currentDocxUrl = docxUrlFor(meta);
+    renderHistory(id);
+    document.getElementById('report-title').textContent = `${input.company} — pain-point report`;
+    document.getElementById('report-body').innerHTML = renderReportHTML(meta, markdown);
+    if(window.lucide) lucide.createIcons();
+    showView('report');
+  }).catch(err=>{
+    settled = true;
+    const msg = (err && err.message) ? err.message : String(err);
+    log('✗ error: '+msg, 'q');
+    const box = document.getElementById('progress-error');
+    box.textContent = 'Could not reach the backend: ' + msg + '. Check RESEARCH_API_BASE and that your FastAPI server is running.';
+    box.style.display = 'block';
+  });
+}
+
+document.getElementById('btn-download').addEventListener('click', ()=>{
+  if(!currentDocxUrl) return;
+  // Navigate to the backend file directly rather than fetching it — routers.py
+  // sends it with a Content-Disposition: attachment header, so the browser
+  // downloads it with the right filename even across origins/CORS.
+  const a = document.createElement('a');
+  a.href = currentDocxUrl; a.download = `${slug(currentCompany||'company')}_pain-point-report.docx`;
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+renderHistory(null);
+const apiLabelEl = document.getElementById('api-base-label');
+if(apiLabelEl) apiLabelEl.textContent = window.RESEARCH_API_BASE;
+if(window.lucide) lucide.createIcons();
+</script>
+
+</body>
+</html>

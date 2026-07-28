@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from config import ANTHROPIC_API_KEY, PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH  # noqa: E402
+from services.docx_export import markdown_to_docx  # noqa: E402
 
 SCRAPER_SERVER = ROOT / "mcp_server" / "scraper_server.py"
 
@@ -104,11 +105,15 @@ async def main_async(args) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     outputs_dir = ROOT / "outputs"
     outputs_dir.mkdir(exist_ok=True)
-    output_path = outputs_dir / f"{company_slug}_{PROMPT_VERSION}_{provider}_{timestamp}.md"
+    base_name = f"{company_slug}_{PROMPT_VERSION}_{provider}_{timestamp}"
+    output_path = outputs_dir / f"{base_name}.md"
     output_path.write_text(result.text, encoding="utf-8")
 
+    docx_path = outputs_dir / f"{base_name}.docx"
+    markdown_to_docx(result.text).save(docx_path)
+
     print(result.text)
-    print(f"\n---\nOutput salvato in: {output_path}")
+    print(f"\n---\nOutput salvato in: {output_path} e {docx_path}")
     print(f"Provider: {provider} | Model: {result.model} | Prompt version: {PROMPT_VERSION}")
     print("Note: mandatory human review before every commercial use.")
 

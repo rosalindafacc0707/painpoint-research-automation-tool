@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class GenerateMdDocResponse(BaseModel):
     filename: str
+    docx_filename: str
     company: str
     provider: str
     model: str
@@ -12,3 +13,4 @@ class GenerateMdDocResponse(BaseModel):
     stop_reason: str | None
     truncated: bool
     download_url: str
+    docx_download_url: str

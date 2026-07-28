@@ -39,6 +39,17 @@ ffd-painpoint-research/
 │       └── FFD_Pain_Point_Research_Automation_MoSCoW_BriefingRequirements.csv
 ├── scripts/
 │   └── run_prompt_test.py     # test manuale: 1 azienda per esecuzione
+├── main.py                    # app FastAPI (monta il router + serve frontend/)
+├── routers/
+│   └── routers.py             # endpoint /painpoint-researcher/*
+├── schemas/
+│   ├── requests.py            # GenerateMdDocRequest
+│   └── responses.py           # GenerateMdDocResponse
+├── services/
+│   ├── report_service.py      # stessa logica di run_prompt_test.py, richiamabile da FastAPI
+│   └── docx_export.py         # converte il markdown del report in un .docx
+├── frontend/
+│   └── index.html             # UI statica (no build step) che consuma le API sopra
 ├── outputs/                    # report generati (non committati, vedi .gitignore)
 ├── docs/
 │   └── project_context.md     # contesto e piano di sviluppo del progetto
@@ -74,7 +85,12 @@ ffd-painpoint-research/
    system prompt in `prompts/system_prompt_v3.md`. Versione del prompt,
    "agent version" e data di run vengono iniettate automaticamente dallo
    script. L'output viene stampato a schermo e salvato in `outputs/` come
-   `{azienda}_{versione_prompt}_{provider}_{timestamp}.md`.
+   `{azienda}_{versione_prompt}_{provider}_{timestamp}.md` **e** come
+   `.docx` corrispondente (stesso nome base), generato da
+   `services/docx_export.py` — heading, elenchi, tabelle, grassetto/corsivo
+   e le citazioni `[Source: ...]` (queste ultime come hyperlink veri e
+   propri sul titolo dell'articolo, senza mostrare l'URL) vengono convertiti
+   in un vero documento Word, non solo un export testuale.
 
 ## Switch di provider: Anthropic vs Azure OpenAI
 
@@ -123,6 +139,52 @@ Completions API usata invece per il path open-source/generico.
 aggiorna il piano. Nel frattempo puoi continuare a testare il prompt con
 `--provider azure`.
 
+## API FastAPI e frontend
+
+Oltre allo script CLI (`scripts/run_prompt_test.py`), la stessa logica di
+generazione è esposta come API tramite `main.py` + `routers/routers.py`, con
+un frontend statico a pagina singola (`frontend/index.html`, nessun build
+step: HTML/CSS/JS vanilla) che la consuma.
+
+Avvio:
+
+```
+uvicorn main:app --reload
+```
+
+`main.py` monta `frontend/` come static file alla radice, quindi l'interfaccia
+è raggiungibile direttamente su **`http://localhost:8000/`**, sulla stessa
+origine dell'API (nessuna configurazione CORS necessaria in questo caso).
+È comunque attivo un `CORSMiddleware` permissivo, utile se preferisci servire
+`frontend/index.html` da un altro processo durante lo sviluppo (es.
+`python -m http.server` su un'altra porta) — in quel caso imposta
+`window.RESEARCH_API_BASE` in cima al file prima che venga caricato lo
+script, o modifica direttamente il fallback nel file.
+
+Endpoint disponibili (prefisso `/painpoint-researcher`):
+
+- `POST /generate-pain-point-md` — body `GenerateMdDocRequest`
+  (`company_name` obbligatorio; `website`, `country_region`, `department`,
+  `industry`, `research_lens`, `provider` opzionali). Esegue lo stesso
+  agentic loop dello script CLI e salva il report in `outputs/` sia come
+  `.md` che come `.docx`. Risponde con `GenerateMdDocResponse` (`filename`,
+  `docx_filename`, `company`, `provider`, `model`, `prompt_version`,
+  `stop_reason`, `truncated`, `download_url`, `docx_download_url`).
+- `GET /download/{filename}` — restituisce il file richiesto (`.md` o
+  `.docx`) con il `Content-Type` corretto, come allegato scaricabile.
+
+Il frontend fa un form di intake (stessi campi di
+`inputs/sample_company_input.md`, incluso lo switch di provider), chiama
+`generate-pain-point-md`, poi `download/{filename}` sul `.md` per leggere e
+renderizzare il contenuto del report a schermo, e tiene uno storico delle
+run in `localStorage` del browser (nessun salvataggio server-side oltre ai
+file in `outputs/`). Il pulsante "Download .docx" punta invece direttamente
+a `docx_download_url`: scarica il file Word generato lato server, non
+un export testuale creato nel browser. La vista "in corso" con i passi di
+ricerca è puramente cosmetica: il backend risponde con un'unica chiamata
+sincrona, non ci sono eventi di progresso reali durante l'esecuzione
+dell'agente.
+
 ## Regole ferree di questa fase
 
 - Un'azienda per esecuzione — mai batch.
@@ -144,6 +206,9 @@ progetto è in `docs/project_context.md`.
 
 Il piano di sviluppo complessivo prevede una Fase 2 (pipeline scriptata,
 output strutturato, export Word) e una Fase 3 (interfaccia interna
-semplice, testing con i colleghi sales). Questo repository copre solo la
-Fase 1 e non verrà esteso alle fasi successive finché il system prompt non
-sarà validato su aziende reali.
+semplice, testing con i colleghi sales). L'API FastAPI e il frontend
+descritti sopra sono un primo prototipo tecnico in questa direzione, ma
+restano strumenti di test interno: niente export Word, nessun testing
+strutturato con i colleghi sales, nessuna delle rimanenti "Should"
+requirement di Fase 3. Il repository non verrà esteso oltre questo finché
+il system prompt non sarà validato su aziende reali.
