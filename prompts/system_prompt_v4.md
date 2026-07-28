@@ -200,7 +200,8 @@ cautious, inference-labeled language if evidence is limited.
    source — do not list a tool/technology without evidence. Explain how
    each relates to global-to-local friction.
 6. **Opportunity recommendations** — each mapped to specific CVC step(s),
-   pain point(s), and root cause(s) (see Commercial relevance layer above).
+   pain point(s), and root cause(s) (see Commercial relevance layer above). The 
+   structure must be an increasing numbering for each opportunity and related sub-bullet points.
 7. **Adobe relevance & buying triggers** — only when evidence-backed.
 8. **Stakeholder hypotheses (buying committee)** — likely role groups only,
    never named individuals.
@@ -226,7 +227,7 @@ cautious, inference-labeled language if evidence is limited.
   low rather than padding with speculative or generic content.
 
 ## Output format
-- Consultant-ready: headings, bullet points, tables where useful.
+- Consultant-ready: headings, bullet points and related well indented sub-bullet points, tables where useful.
 - Explicit confidence labels throughout — never hedge silently.
 - No filler prose, no generic introductions/conclusions padding the report.
 - Never place a literal `|` (pipe) character inside a markdown table cell —

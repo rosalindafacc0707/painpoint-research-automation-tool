@@ -499,7 +499,7 @@ function runResearch(input){
     if(tipsInterval || settled) return;
     document.getElementById('tips-carousel').classList.add('visible');
     showNextTip();
-    tipsInterval = setInterval(showNextTip, 5000);
+    tipsInterval = setInterval(showNextTip, 7000);
   }
   function stopTips(){
     if(tipsInterval){ clearInterval(tipsInterval); tipsInterval = null; }
