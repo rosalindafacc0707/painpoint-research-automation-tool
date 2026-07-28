@@ -145,6 +145,12 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
   overflow:hidden; }
 .progress-bar-fill{ height:100%; background:var(--color-accent); border-radius:999px; width:0%;
   transition:width .3s ease; }
+.tips-carousel{ display:none; align-items:center; gap:14px; margin-top:var(--space-4);
+  padding:var(--space-5) var(--space-5); border-radius:var(--radius-md); background:var(--color-accent-2-100);
+  color:var(--color-accent-2-800); font-size:16px; line-height:1.6; min-height:88px; box-shadow:var(--shadow-md); }
+.tips-carousel.visible{ display:flex; }
+.tips-carousel svg{ flex:none; width:22px; height:22px; }
+.tips-carousel .tip-text{ opacity:0; animation:fadeIn .4s forwards; font-weight:500; }
 
 /* — report — */
 .report-bar{ display:flex; align-items:center; gap:var(--space-3); justify-content:space-between;
@@ -232,6 +238,7 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
             <div class="console" id="console"></div>
             <div id="progress-error" style="display:none;margin-top:12px;font-size:13px;color:var(--color-accent-800);background:var(--color-accent-100);padding:10px 14px;border-radius:var(--radius-md)"></div>
             <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+            <div class="tips-carousel" id="tips-carousel"><i data-lucide="lightbulb" style="width:22px;height:22px"></i><span class="tip-text" id="tip-text"></span></div>
           </div>
         </div>
       </section>
@@ -257,6 +264,38 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
 // events, so this list just gives the user something to look at while
 // generate-pain-point-md is running.
 const RESEARCH_TOPICS = ["Marketing transformation programs","Content workflow and operating model","Governance and brand control","Global rollout / global-to-local model","Embedded teams and organisation structure","Data ownership","Brand integrity","AI in marketing"];
+
+// Shown one at a time, on a loop, once the step list has finished animating
+// but the backend call is still running — gives the user something to read
+// during the (often much longer) real research time.
+const RESEARCH_TIPS = [
+  "The Content Value Chain has six steps: Briefing, Asset Creation, Asset Management, Content Assembly / Modularisation, Omnichannel Publishing, and Optimisation / Performance Learning.",
+  "Global brands often lose the most time in the handoff between global briefing and regional adaptation.",
+  "Embedded content teams reduce friction but can create governance blind spots without centralised brand controls.",
+  "Content approval bottlenecks are usually a legal/compliance handoff problem, not a creative one.",
+  "The strongest pain-point briefs pair a friction point with a named owner and a rough cost of inaction.",
+  "Sales tip: a pain point backed by a direct quote or case study closes faster than one that's only inferred.",
+  "Local execution delays are one of the most-cited CVC pain points across global marketing organisations.",
+  "Data ownership disputes between global and regional teams are a common, under-reported source of rework.",
+  "Every pain point should trace to a likely root cause: process, governance, tooling, capability, or operating model.",
+  "High-severity findings need real evidence — never force a high-severity rating just to fill out a CVC step.",
+  "Confidence ratings should reflect source quality, recency, and whether a claim was triangulated across two or more sources.",
+  "Sources older than 24–36 months can add context, but shouldn't drive conclusions about a prospect's current transformation.",
+  "Asset Management pain often hides in plain sight: teams rebuild assets that already exist because nobody can find them in the DAM.",
+  "Modular content and templated assets are usually how mature brands solve global-to-local adaptation friction.",
+  "Watch for Adobe signals: AEM, Workfront, GenStudio, Firefly, Analytics, Campaign, AJO, and RT-CDP mentions all point to MarTech maturity.",
+  "A centralised operating model isn't always the goal — federated models work fine if governance and templates are strong.",
+  "Job posts for DAM, Content Ops, or MarTech roles are a quiet but reliable signal of where a company is investing.",
+  "Sales tip: transformation programs, reorgs, and cost-reduction pushes are buying triggers — but only when tied to an actual CVC pain point.",
+  "\"Slow process\" isn't a pain point — \"local markets can't adapt hero assets into channel-ready variants without rework\" is.",
+  "Every recommended opportunity should map back to at least one pain point and root cause — never pitch a capability in the abstract.",
+  "Stakeholder mapping matters: a pain point owned by Creative Operations sells differently than one owned by Legal.",
+  "If public evidence is thin for a CVC step, say so — inventing a plausible-sounding pain point erodes trust faster than a short report.",
+  "Sales tip: pain points tied to a named stakeholder group close faster than ones aimed at \"the company\" in general.",
+  "The best workflow maps show handoffs, not just steps — global brief → master asset → regional adaptation → local execution → approval → publish → feedback.",
+  "Agencies are part of the workflow too — leaving them out of the map usually hides where the real bottleneck sits.",
+  "A pain-point inventory is only as useful as its evidence column — a claim without a source is a guess, not a finding.",
+];
 
 function slug(s){ return s.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'company'; }
 
@@ -428,13 +467,14 @@ function runResearch(input){
   document.getElementById('console').innerHTML = '';
   document.getElementById('progress-fill').style.width = '0%';
   document.getElementById('progress-error').style.display = 'none';
+  document.getElementById('tips-carousel').classList.remove('visible');
   const stepsList = document.getElementById('steps-list');
   stepsList.innerHTML = RESEARCH_TOPICS.map((t,idx)=>`<div class="step" id="step-${idx}"><div class="step-dot"><i data-lucide="circle" style="width:11px;height:11px"></i></div><div class="step-label">${t}</div></div>`).join('');
   if(window.lucide) lucide.createIcons();
   showView('progress');
 
   const total = RESEARCH_TOPICS.length;
-  let i = 0, settled = false;
+  let i = 0, settled = false, tipsInterval = null, lastTipIdx = -1;
   const consoleEl = document.getElementById('console');
   function log(text, cls){
     const d = document.createElement('div'); d.className = 'ln '+(cls||''); d.textContent = text;
@@ -445,8 +485,29 @@ function runResearch(input){
     el.classList.remove('active'); el.classList.add('done');
     el.querySelector('.step-dot').innerHTML = '<i data-lucide="check" style="width:12px;height:12px"></i>';
   }
+  function showNextTip(){
+    let idx = Math.floor(Math.random()*RESEARCH_TIPS.length);
+    if(RESEARCH_TIPS.length > 1 && idx === lastTipIdx){
+      idx = (idx + 1) % RESEARCH_TIPS.length;
+    }
+    lastTipIdx = idx;
+    const textEl = document.getElementById('tip-text');
+    textEl.style.animation = 'none'; void textEl.offsetWidth; textEl.style.animation = '';
+    textEl.textContent = RESEARCH_TIPS[idx];
+  }
+  function startTips(){
+    if(tipsInterval || settled) return;
+    document.getElementById('tips-carousel').classList.add('visible');
+    showNextTip();
+    tipsInterval = setInterval(showNextTip, 5000);
+  }
+  function stopTips(){
+    if(tipsInterval){ clearInterval(tipsInterval); tipsInterval = null; }
+    document.getElementById('tips-carousel').classList.remove('visible');
+  }
   function animate(){
-    if(settled || i >= total) return;
+    if(settled) return;
+    if(i >= total){ startTips(); return; }
     const topic = RESEARCH_TOPICS[i];
     document.getElementById('step-'+i).classList.add('active');
     log(`researching: ${topic.toLowerCase()}`, 'q');
@@ -458,12 +519,13 @@ function runResearch(input){
       document.getElementById('progress-fill').style.width = Math.round((i/total)*100)+'%';
       log(`✓ ${topic} — noted`, 'ok');
       animate();
-    }, 450 + Math.random()*350);
+    }, 900 + Math.random()*500);
   }
   animate();
 
   callBackend(input).then(({meta, markdown})=>{
     settled = true;
+    stopTips();
     for(let k=0;k<total;k++) markDone(k);
     document.getElementById('progress-fill').style.width = '100%';
     if(window.lucide) lucide.createIcons();
@@ -481,6 +543,7 @@ function runResearch(input){
     showView('report');
   }).catch(err=>{
     settled = true;
+    stopTips();
     const msg = (err && err.message) ? err.message : String(err);
     log('✗ error: '+msg, 'q');
     const box = document.getElementById('progress-error');
