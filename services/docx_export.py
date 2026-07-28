@@ -1,10 +1,20 @@
 """Converts the markdown report text into a .docx Document.
 
 Handles the subset of markdown the system prompt actually produces: ATX
-headings, bullet/numbered lists, blockquotes, pipe tables, bold/italic/code
-spans, and the `[Source: "Title," Publisher, Date](https://url)` inline
-citations (turned into real Word hyperlinks, same as the frontend does for
-the browser view) — not a general-purpose markdown parser.
+headings, nested bullet/numbered lists, blockquotes, pipe tables,
+bold/italic/code spans, and the `[Source: "Title," Publisher, Date](https://url)`
+inline citations (turned into real Word hyperlinks, same as the frontend does
+for the browser view) — not a general-purpose markdown parser.
+
+List nesting depth is derived from each line's leading indentation (any
+increase in indentation opens one nesting level deeper, matching how the
+frontend's markdown renderer interprets the same markdown). Ordered items are
+rendered as literal "N." text with a hanging indent rather than Word's native
+numPr auto-numbering: python-docx's built-in "List Number" style binds every
+paragraph to the *same* numbering definition, so two unrelated numbered lists
+elsewhere in the same report (e.g. the workflow map and the opportunity list)
+would otherwise render as one continuously-incrementing list instead of each
+starting at 1.
 """
 
 from __future__ import annotations
@@ -13,9 +23,10 @@ import re
 
 import docx.opc.constants
 from docx import Document
+from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Inches, RGBColor
+from docx.shared import RGBColor, Twips
 
 SOURCE_CITATION_RE = re.compile(
     r'\[(Source:[^\]]+)\]\((https?://[^\s)]+)\)', re.IGNORECASE
@@ -23,12 +34,37 @@ SOURCE_CITATION_RE = re.compile(
 INLINE_TOKEN_RE = re.compile(r"(\*\*.+?\*\*|(?<!\*)\*(?!\*).+?(?<!\*)\*(?!\*)|`[^`]+`)")
 HEADING_RE = re.compile(r"^(#{1,4})\s+(.*)")
 BULLET_RE = re.compile(r"^[-*]\s+(.*)")
-NUMBERED_RE = re.compile(r"^\d+\.\s+(.*)")
+NUMBERED_RE = re.compile(r"^(\d+)\.\s+(.*)")
 QUOTE_RE = re.compile(r"^>\s?(.*)")
 RULE_RE = re.compile(r"^(-{3,}|\*{3,})$")
 TABLE_SEPARATOR_RE = re.compile(r"^:?-+:?$")
 
 LINK_COLOR = RGBColor(0x9C, 0x53, 0x26)
+
+# Matches Word's own built-in "List Bullet"/"List Number" indent step (0.25in).
+LIST_INDENT_UNIT = 360
+BULLET_STYLES = ["List Bullet", "List Bullet 2", "List Bullet 3"]
+
+
+def _list_depth(indent_stack: list[int], indent: int) -> int:
+    """Maps a line's leading-space count to a 0-based nesting depth.
+
+    Any indentation increase relative to the current stack opens one level
+    deeper; any decrease pops back to (or below) that level — mirrors the
+    frontend's `mdToHtml` nesting rule so the two renderers agree.
+    """
+    while indent_stack and indent < indent_stack[-1]:
+        indent_stack.pop()
+    if not indent_stack or indent > indent_stack[-1]:
+        indent_stack.append(indent)
+    return len(indent_stack) - 1
+
+
+def _apply_list_indent(paragraph, depth: int) -> None:
+    left = Twips(LIST_INDENT_UNIT * (depth + 1))
+    paragraph.paragraph_format.left_indent = left
+    paragraph.paragraph_format.first_line_indent = Twips(-LIST_INDENT_UNIT)
+    return left
 
 
 def _add_hyperlink(paragraph, url: str, text: str) -> None:
@@ -112,15 +148,21 @@ def markdown_to_docx(markdown_text: str) -> Document:
     document = Document()
     lines = markdown_text.replace("\r\n", "\n").split("\n")
     i, n = 0, len(lines)
+    indent_stack: list[int] = []
 
     while i < n:
-        stripped = lines[i].strip()
+        raw_line = lines[i].replace("\t", "    ")
+        stripped = raw_line.strip()
 
         if not stripped:
+            # Blank lines don't close a list: the report writes loose lists
+            # (a blank line between each numbered step) purely for
+            # readability, and it must keep counting 1, 2, 3... across them.
             i += 1
             continue
 
         if stripped.startswith("|") and stripped.endswith("|"):
+            indent_stack.clear()
             table_lines = []
             while i < n and lines[i].strip().startswith("|"):
                 table_lines.append(lines[i].strip())
@@ -130,6 +172,7 @@ def markdown_to_docx(markdown_text: str) -> Document:
 
         heading_match = HEADING_RE.match(stripped)
         if heading_match:
+            indent_stack.clear()
             level = len(heading_match.group(1))
             heading = document.add_heading(level=min(level, 4))
             _add_inline_runs(heading, heading_match.group(2))
@@ -137,28 +180,40 @@ def markdown_to_docx(markdown_text: str) -> Document:
             continue
 
         if RULE_RE.match(stripped):
+            indent_stack.clear()
             document.add_paragraph("—" * 20)
             i += 1
             continue
 
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+
         bullet_match = BULLET_RE.match(stripped)
         if bullet_match:
-            paragraph = document.add_paragraph(style="List Bullet")
+            depth = _list_depth(indent_stack, indent)
+            style = BULLET_STYLES[min(depth, len(BULLET_STYLES) - 1)]
+            paragraph = document.add_paragraph(style=style)
+            _apply_list_indent(paragraph, depth)
             _add_inline_runs(paragraph, bullet_match.group(1))
             i += 1
             continue
 
         numbered_match = NUMBERED_RE.match(stripped)
         if numbered_match:
-            paragraph = document.add_paragraph(style="List Number")
-            _add_inline_runs(paragraph, numbered_match.group(1))
+            depth = _list_depth(indent_stack, indent)
+            paragraph = document.add_paragraph()
+            left = _apply_list_indent(paragraph, depth)
+            paragraph.paragraph_format.tab_stops.add_tab_stop(left, WD_TAB_ALIGNMENT.LEFT)
+            paragraph.add_run(f"{numbered_match.group(1)}.\t")
+            _add_inline_runs(paragraph, numbered_match.group(2))
             i += 1
             continue
+
+        indent_stack.clear()
 
         quote_match = QUOTE_RE.match(stripped)
         if quote_match:
             paragraph = document.add_paragraph()
-            paragraph.paragraph_format.left_indent = Inches(0.3)
+            paragraph.paragraph_format.left_indent = Twips(432)
             _add_inline_runs(paragraph, quote_match.group(1))
             for run in paragraph.runs:
                 run.italic = True

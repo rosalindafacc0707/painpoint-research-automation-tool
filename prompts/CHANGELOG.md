@@ -1,5 +1,24 @@
 # Prompt Changelog
 
+## v5 — 2026-07-28
+- Diagnosed against the UI/DOCX rendering, not the model output itself: the
+  workflow map and opportunity-recommendations lists (numbered top-level
+  step/opportunity, sub-bullets for Inputs/Likely handoff/Inference/Evidence
+  underneath) were being flattened downstream — the frontend's `mdToHtml`
+  and `services/docx_export.py` treated every list line as top-level
+  regardless of indentation, and closing the list on the blank line between
+  each numbered step made every step reopen its own fresh list, so each one
+  displayed as "1." instead of continuing 1, 2, 3... Both renderers were
+  rewritten to track nesting depth from leading indentation and to keep a
+  numbered list open across blank lines between siblings.
+- Added an explicit "Markdown list formatting" rule to Output format: every
+  sub-bullet must be indented 4 spaces (never a tab) relative to its parent
+  marker, consistently at every nesting level, and a parent item with its
+  own sub-detail must stay inside one list block rather than being split
+  into separate top-level numbered points. Applied the same nesting
+  instruction to the "Workflow mapping" section and to "Opportunity
+  recommendations" in Deliverable structure, instead of only the latter.
+
 ## v1 — 2026-07-23
 - Prima bozza del system prompt, derivata dal file MoSCoW (EPIC: Input &
   prospect intake, Evidence & research, CVC analysis framework, Workflow

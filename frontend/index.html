@@ -169,7 +169,10 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
 .section h3{ font-size:20px; margin:0 0 var(--space-3); }
 .section-kicker{ font-size:11px; letter-spacing:0.08em; text-transform:uppercase; font-weight:600;
   color:var(--color-accent-700); margin-bottom:4px; }
-.summary-list{ margin:0; padding-left:20px; display:flex; flex-direction:column; gap:8px; font-size:14.5px; }
+.summary-list{ margin:0; padding-left:22px; display:flex; flex-direction:column; gap:10px; font-size:14.5px; line-height:1.55; }
+.summary-list > li{ padding-left:2px; }
+.summary-list ul.summary-list, .summary-list ol.summary-list{ margin:6px 0 0; padding-left:20px; gap:6px; font-size:0.95em; color:color-mix(in srgb, var(--color-text) 88%, transparent); }
+.summary-list strong{ color:var(--color-accent-800); }
 .section a{ color:var(--color-accent-700); text-decoration:underline; text-decoration-color:var(--color-accent-300); }
 .section a:hover{ color:var(--color-accent-800); }
 
@@ -318,10 +321,26 @@ function inlineMd(s){
   return linkifySourceCitations(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g,'<em>$1</em>').replace(/`([^`]+)`/g,'<code style="background:var(--color-neutral-200);padding:1px 5px;border-radius:6px;font-size:0.92em">$1</code>');
 }
 
+// Nested-list parsing: a stack of open <ul>/<ol> levels keyed by each
+// level's leading-indent width. A line indented deeper than the current
+// top of stack opens a new nested list *inside* the current <li> (its
+// closing tag is deferred, not written, until something pops that level);
+// a shallower indent pops back out. Blank lines are pure no-ops here — the
+// report writes loose lists (a blank line between each numbered step)
+// purely for readability, and closing the list on every blank line is what
+// used to make each step reopen its own fresh <ol>, restarting the count
+// at "1." every time.
 function mdToHtml(md){
   const lines = md.replace(/\r\n/g,'\n').split('\n');
-  let html = '', inList=false, listType='', inTable=false, tableRows=[];
-  function closeList(){ if(inList){ html += `</${listType}>`; inList=false; } }
+  let html = '', inTable=false, tableRows=[];
+  const listStack = []; // {indent, type:'ul'|'ol', liOpen}
+
+  function closeListLevel(){
+    const top = listStack.pop();
+    if(top.liOpen) html += '</li>';
+    html += `</${top.type}>`;
+  }
+  function closeAllLists(){ while(listStack.length) closeListLevel(); }
   function closeTable(){
     if(inTable){
       const [head,...rows] = tableRows;
@@ -331,22 +350,45 @@ function mdToHtml(md){
       inTable=false; tableRows=[];
     }
   }
+  function openListItem(indent, type, contentHtml){
+    while(listStack.length && indent < listStack[listStack.length-1].indent){
+      closeListLevel();
+    }
+    const top = listStack[listStack.length-1];
+    if(top && indent === top.indent){
+      if(top.type !== type){
+        closeListLevel();
+        html += `<${type} class="summary-list">`;
+        listStack.push({indent, type, liOpen:false});
+      }
+    } else {
+      html += `<${type} class="summary-list">`;
+      listStack.push({indent, type, liOpen:false});
+    }
+    const level = listStack[listStack.length-1];
+    if(level.liOpen) html += '</li>';
+    html += `<li>${contentHtml}`;
+    level.liOpen = true;
+  }
   for(const line of lines){
     if(/^\s*\|.*\|\s*$/.test(line)){
+      closeAllLists();
       if(/^[\s|:\-]+$/.test(line)) continue;
       const cells = line.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
       inTable=true; tableRows.push(cells); continue;
     } else { closeTable(); }
-    if(/^#{1,4}\s/.test(line)){ closeList(); const level=line.match(/^#+/)[0].length; const text=line.replace(/^#{1,4}\s/,''); const tag='h'+Math.min(level+1,5); html+=`<${tag} class="section-kicker" style="font-size:${level<=2?'20px':'15px'};text-transform:none;letter-spacing:0;color:var(--color-text);margin-top:28px;font-family:var(--font-heading)">${inlineMd(text)}</${tag}>`; continue; }
-    if(/^>\s?/.test(line)){ html += `<blockquote style="border-left:3px solid var(--color-accent-300);padding-left:12px;color:color-mix(in srgb, var(--color-text) 70%, transparent);font-size:13.5px;margin:10px 0">${inlineMd(line.replace(/^>\s?/,''))}</blockquote>`; continue; }
-    if(/^\s*[-*]\s+/.test(line)){ if(!inList||listType!=='ul'){ closeList(); html+='<ul class="summary-list">'; inList=true; listType='ul'; } html+=`<li>${inlineMd(line.replace(/^\s*[-*]\s+/,''))}</li>`; continue; }
-    if(/^\s*\d+\.\s+/.test(line)){ if(!inList||listType!=='ol'){ closeList(); html+='<ol class="summary-list">'; inList=true; listType='ol'; } html+=`<li>${inlineMd(line.replace(/^\s*\d+\.\s+/,''))}</li>`; continue; }
-    if(/^\s*(---|\*\*\*)\s*$/.test(line)){ closeList(); html += '<div style="height:1px;background:var(--color-divider);margin:20px 0"></div>'; continue; }
-    if(line.trim()===''){ closeList(); continue; }
-    closeList();
+    if(/^#{1,4}\s/.test(line)){ closeAllLists(); const level=line.match(/^#+/)[0].length; const text=line.replace(/^#{1,4}\s/,''); const tag='h'+Math.min(level+1,5); html+=`<${tag} class="section-kicker" style="font-size:${level<=2?'20px':'15px'};text-transform:none;letter-spacing:0;color:var(--color-text);margin-top:28px;font-family:var(--font-heading)">${inlineMd(text)}</${tag}>`; continue; }
+    if(/^>\s?/.test(line)){ closeAllLists(); html += `<blockquote style="border-left:3px solid var(--color-accent-300);padding-left:12px;color:color-mix(in srgb, var(--color-text) 70%, transparent);font-size:13.5px;margin:10px 0">${inlineMd(line.replace(/^>\s?/,''))}</blockquote>`; continue; }
+    const bulletMatch = line.match(/^(\s*)[-*]\s+(.*)/);
+    const numberedMatch = !bulletMatch && line.match(/^(\s*)\d+\.\s+(.*)/);
+    if(bulletMatch){ openListItem(bulletMatch[1].length, 'ul', inlineMd(bulletMatch[2])); continue; }
+    if(numberedMatch){ openListItem(numberedMatch[1].length, 'ol', inlineMd(numberedMatch[2])); continue; }
+    if(/^\s*(---|\*\*\*)\s*$/.test(line)){ closeAllLists(); html += '<div style="height:1px;background:var(--color-divider);margin:20px 0"></div>'; continue; }
+    if(line.trim()===''){ continue; }
+    closeAllLists();
     html += `<p style="font-size:14.5px;line-height:1.6">${inlineMd(line)}</p>`;
   }
-  closeList(); closeTable();
+  closeAllLists(); closeTable();
   return html;
 }
 
