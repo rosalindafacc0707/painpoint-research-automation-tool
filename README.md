@@ -25,7 +25,11 @@ ffd-painpoint-research/
 ├── providers/
 │   ├── base.py                # RunResult condiviso tra i provider
 │   ├── anthropic_provider.py  # Claude + web_search (server-side) + fetch_url
-│   └── azure_provider.py      # Azure OpenAI / Azure AI Foundry + web_search_ddg + fetch_url
+│   ├── azure_provider.py      # Azure OpenAI / Azure AI Foundry + web_search_ddg + fetch_url
+│   ├── gemini_provider.py     # Google Gemini + web_search_ddg + fetch_url
+│   ├── gemma_provider.py      # Google-hosted Gemma + web_search_ddg + fetch_url
+│   ├── ollama_provider.py     # Modello open-weight locale + web_search_ddg + fetch_url
+│   └── groq_provider.py       # GPT-OSS open-weight veloce + web_search_ddg + fetch_url
 ├── mcp_server/
 │   └── scraper_server.py      # tool MCP: fetch_url, web_search_ddg
 ├── prompts/
@@ -92,9 +96,9 @@ ffd-painpoint-research/
    propri sull'intero blocco tra parentesi quadre, senza mostrare l'URL)
    vengono convertiti in un vero documento Word, non solo un export testuale.
 
-## Switch di provider: Anthropic vs Azure OpenAI
+## Switch di provider: Anthropic, Azure OpenAI, Gemini, Gemma, Ollama o Groq
 
-Lo script supporta due provider, scelti da `PROVIDER` in `.env.development`
+Lo script supporta sei provider, scelti da `PROVIDER` in `.env.development`
 oppure passando `--provider` da riga di comando:
 
 ```
@@ -103,7 +107,68 @@ python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider anthropic
 
 # Azure OpenAI / Azure AI Foundry
 python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider azure
+
+# Google Gemini
+python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider gemini
+
+# Google-hosted Gemma
+python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider gemma
+
+# Modello open-weight locale via Ollama
+python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider ollama
+
+# Modello open-weight veloce via Groq
+python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider groq
 ```
+
+Per Gemini imposta `GEMINI_API_KEY` in `.env` e, opzionalmente,
+`GEMINI_MODEL` in `.env.development` (default: `gemini-2.5-pro`). Gemini usa
+gli stessi due tool MCP locali del provider Azure: `web_search_ddg` per
+scoprire fonti e `fetch_url` per leggerle.
+
+Gemma è ospitato sulla stessa Gemini API e può riutilizzare `GEMINI_API_KEY`;
+imposta `GEMMA_API_KEY` solo se desideri una chiave distinta. Il modello si
+configura con `GEMMA_MODEL` (default: `gemma-4-26b-a4b-it`).
+
+### Provider locale open-weight: Ollama + Qwen
+
+Per chiamate senza costi per richiesta usa il provider `ollama`: il modello
+gira sul computer, quindi non richiede API key. Su questo MacBook Air M4 con
+16 GB di memoria il default raccomandato è `qwen3.5:9b`, scelto perché supporta
+tool calling e lascia memoria sufficiente per un contesto di 32k token.
+
+Installa Ollama, avvialo e scarica il modello una sola volta:
+
+```bash
+ollama serve
+ollama pull qwen3.5:9b
+```
+
+Poi esegui il comando con `--provider ollama` oppure imposta
+`PROVIDER=ollama` in `.env.development`. Puoi cambiare host, modello, contesto
+e temperatura con le variabili `OLLAMA_*` nello stesso file. Il modello è
+locale ma il tool `web_search_ddg` continua a interrogare il web per reperire
+le fonti; mantieni quindi la revisione umana obbligatoria prima dell'uso
+commerciale.
+
+### Provider open-weight veloce: Groq + GPT-OSS 120B
+
+Per la qualità del report senza la lentezza dell'inferenza locale usa
+`groq`. Il default `openai/gpt-oss-120b` è un modello open-weight da 120B
+servito da Groq a circa 500 token/s, con 131k token di contesto e supporto ai
+tool. Aggiungi `GROQ_API_KEY` in `.env`, poi seleziona `--provider groq`.
+
+Non è un servizio illimitato: usa una API key e ha costi e rate limit. Per il
+piano Developer documentato, GPT-OSS 120B ha un limite di 250k token/minuto e
+1.000 richieste/minuto; per questo prototipo è molto più vicino a “quanto
+voglio” rispetto a un endpoint tradizionale, ma non sostituisce un piano
+commerciale per un carico continuo.
+
+Un account Groq on-demand può avere un limite iniziale molto più basso (ad
+esempio 8k token/minuto). Il provider limita automaticamente output e testo
+delle fonti per evitare richieste rifiutate; le variabili GROQ_MAX_COMPLETION_TOKENS,
+GROQ_TPM_LIMIT e GROQ_TOOL_RESULT_MAX_CHARS devono essere aumentate solo dopo
+un upgrade del piano.
 
 Per usare Azure, dalla pagina della risorsa in Azure AI Foundry servono due
 valori (oltre alla API key):

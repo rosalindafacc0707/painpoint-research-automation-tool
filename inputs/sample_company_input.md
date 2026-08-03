@@ -1,7 +1,7 @@
-# Prospect Intake — Just Eat Takeaway.com
+# Prospect Intake — FullForce.digital
 
 ## Mandatory Field
-- **Just Eat Takeaway.com**:
+- **FullForce.digital**:
 
 ## Optional Field
 - Website:

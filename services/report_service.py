@@ -15,7 +15,7 @@ import sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from config import ANTHROPIC_API_KEY, PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH
+from config import ANTHROPIC_API_KEY, GEMINI_API_KEY, GEMMA_API_KEY, PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH
 from schemas.requests import GenerateMdDocRequest
 from services.docx_export import markdown_to_docx
 
@@ -55,8 +55,22 @@ async def generate_pain_point_report(request: GenerateMdDocRequest) -> dict:
         from providers.anthropic_provider import run_agent
     elif provider == "azure":
         from providers.azure_provider import run_agent
+    elif provider == "gemini":
+        if not GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY not set. Check the .env file.")
+        from providers.gemini_provider import run_agent
+    elif provider == "gemma":
+        if not GEMMA_API_KEY:
+            raise RuntimeError("GEMMA_API_KEY or GEMINI_API_KEY not set. Check the .env file.")
+        from providers.gemma_provider import run_agent
+    elif provider == "ollama":
+        from providers.ollama_provider import run_agent
+    elif provider == "groq":
+        from providers.groq_provider import run_agent
     else:
-        raise ValueError(f"Unknown provider: {provider!r}. Use 'anthropic' or 'azure'.")
+        raise ValueError(
+            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, or groq."
+        )
 
     system_prompt = (ROOT / SYSTEM_PROMPT_PATH).read_text(encoding="utf-8")
     run_metadata = (

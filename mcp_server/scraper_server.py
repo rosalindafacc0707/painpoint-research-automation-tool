@@ -25,6 +25,14 @@ waiting on them one at a time server-side anyway. Making them `async def`
 and delegating the blocking part to a thread is what lets multiple in-flight
 calls actually overlap.
 
+Both tools also cache successful results in memory for the life of this
+process (one process per research run — see providers/*.py, which launch a
+fresh subprocess per run), and fetch_url reuses a single httpx.Client so
+repeated requests to the same host share a pooled connection. The agent
+occasionally re-searches or re-fetches something it already has (e.g. the
+same URL surfaced by two different queries); replaying identical content
+from cache is free and cannot go stale within a single run.
+
 Run standalone for a manual check:
     python mcp_server/scraper_server.py        # starts the stdio server (waits)
 
@@ -69,6 +77,28 @@ USER_AGENT = (
 
 mcp = FastMCP("web-scraper")
 
+# One httpx.Client for the whole server process (one process per research
+# run — see module docstring). Reusing it lets httpx pool/reuse TCP+TLS
+# connections across calls to the same host, which is common: a single run
+# typically fetches several pages from the same company domain. httpx.Client
+# is documented as safe to share across threads, which matters here since
+# _download_sync runs via asyncio.to_thread and may execute concurrently.
+_http_client = httpx.Client(
+    follow_redirects=True,
+    timeout=REQUEST_TIMEOUT,
+    headers={"User-Agent": USER_AGENT},
+)
+
+# Keyed by the exact (query, max_results) or url the model requested. Scoped
+# to this process's lifetime (one research run) — the agent sometimes
+# re-issues an identical search or re-fetches a URL it already read (e.g.
+# rediscovered via a second query), and the content can't have changed
+# within one run, so repeating the network round trip is pure waste. Only
+# successful results are cached: an ERROR/WARNING is deliberately not
+# cached, so a transient failure can still succeed on retry.
+_search_cache: dict[tuple[str, int], str] = {}
+_fetch_cache: dict[str, str] = {}
+
 
 def _search_sync(query: str, max_results: int) -> list[dict]:
     with DDGS() as ddgs:
@@ -88,6 +118,10 @@ async def web_search_ddg(query: str, max_results: int = 8) -> str:
         query: The search query.
         max_results: Maximum number of results to return (default 8).
     """
+    cache_key = (query, max_results)
+    if cache_key in _search_cache:
+        return _search_cache[cache_key]
+
     try:
         results = await asyncio.to_thread(_search_sync, query, max_results)
     except Exception as exc:  # noqa: BLE001 - surface any backend error to the model
@@ -102,18 +136,15 @@ async def web_search_ddg(query: str, max_results: int = 8) -> str:
         url = r.get("href") or r.get("url", "")
         snippet = r.get("body", "")
         lines.append(f"{i}. {title}\n   URL: {url}\n   {snippet}")
-    return "\n\n".join(lines)
+    output = "\n\n".join(lines)
+    _search_cache[cache_key] = output
+    return output
 
 
 def _download_sync(url: str) -> httpx.Response:
-    with httpx.Client(
-        follow_redirects=True,
-        timeout=REQUEST_TIMEOUT,
-        headers={"User-Agent": USER_AGENT},
-    ) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        return response
+    response = _http_client.get(url)
+    response.raise_for_status()
+    return response
 
 
 def _is_pdf(response: httpx.Response) -> bool:
@@ -168,6 +199,9 @@ async def fetch_url(url: str) -> str:
     if not url.lower().startswith(("http://", "https://")):
         return f"ERROR: not a valid absolute URL: {url!r}"
 
+    if url in _fetch_cache:
+        return _fetch_cache[url]
+
     try:
         response = await asyncio.to_thread(_download_sync, url)
     except httpx.HTTPStatusError as exc:
@@ -208,7 +242,9 @@ async def fetch_url(url: str) -> str:
     if truncated:
         header.append(f"[Content truncated to {MAX_CHARS} characters]")
 
-    return "\n".join(header) + "\n\n" + text
+    output = "\n".join(header) + "\n\n" + text
+    _fetch_cache[url] = output
+    return output
 
 
 if __name__ == "__main__":

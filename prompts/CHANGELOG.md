@@ -1,5 +1,15 @@
 # Prompt Changelog
 
+## v6 — 2026-07-28
+- Runtime performance pass, no change to research scope or evidence
+  standards: added a "Batch independent tool calls" rule to Tools available
+  to you, telling the model to request multiple independent searches/reads
+  in the same turn instead of one at a time when they don't depend on each
+  other. Paired with a code change (providers/*.py, mcp_server/scraper_server.py)
+  that now actually executes same-turn tool calls concurrently instead of
+  sequentially — without this prompt nudge the model was mostly issuing one
+  tool call per turn anyway, leaving that concurrency unused.
+
 ## v5 — 2026-07-28
 - Diagnosed against the UI/DOCX rendering, not the model output itself: the
   workflow map and opportunity-recommendations lists (numbered top-level

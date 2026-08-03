@@ -18,8 +18,15 @@ Provider switch (PROVIDER in .env.development, or --provider on the CLI):
     OpenAI has no built-in web search, this path uses TWO local MCP tools
     instead: web_search_ddg (discovery) and fetch_url (reading). See
     providers/azure_provider.py for required config and setup notes.
+  - "gemini" — Google Gemini API, using the same local MCP research tools as
+    Azure. See providers/gemini_provider.py for required configuration.
+  - "gemma" — Google-hosted Gemma, using the same local MCP research tools.
+  - "ollama" — local open-weight model (default: qwen3.5:9b), using local
+    Ollama and the same MCP research tools. No API key is required.
+  - "groq" — high-speed hosted open-weight GPT-OSS 120B with the same local
+    MCP research tools. Requires GROQ_API_KEY.
 
-Either way, the MCP server (mcp_server/scraper_server.py) is launched once as
+In every case, the MCP server (mcp_server/scraper_server.py) is launched once as
 a stdio subprocess and its tools are handed to whichever provider is active.
 """
 
@@ -60,8 +67,18 @@ async def main_async(args) -> None:
         from providers.anthropic_provider import run_agent
     elif provider == "azure":
         from providers.azure_provider import run_agent
+    elif provider == "gemini":
+        from providers.gemini_provider import run_agent
+    elif provider == "gemma":
+        from providers.gemma_provider import run_agent
+    elif provider == "ollama":
+        from providers.ollama_provider import run_agent
+    elif provider == "groq":
+        from providers.groq_provider import run_agent
     else:
-        sys.exit(f"Unknown provider: {provider!r}. Use 'anthropic' or 'azure'.")
+        sys.exit(
+            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, or groq."
+        )
 
     system_prompt = load_text(ROOT / SYSTEM_PROMPT_PATH)
 
@@ -133,7 +150,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["anthropic", "azure"],
+        choices=["anthropic", "azure", "gemini", "gemma", "ollama", "groq"],
         default=None,
         help="Override PROVIDER from .env.development for this run.",
     )

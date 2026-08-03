@@ -13,12 +13,29 @@ MEDIA_TYPES = {
 }
 
 
+def _report_error_from_group(exc: ExceptionGroup) -> str | None:
+    """Extract the actionable provider error wrapped by MCP/anyio task groups."""
+    for child in exc.exceptions:
+        if isinstance(child, ExceptionGroup):
+            detail = _report_error_from_group(child)
+            if detail:
+                return detail
+        elif isinstance(child, (RuntimeError, ValueError)):
+            return str(child)
+    return None
+
+
 @router.post("/generate-pain-point-md", response_model=GenerateMdDocResponse)
 async def generate(body: GenerateMdDocRequest):
     try:
         result = await generate_pain_point_report(body)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ExceptionGroup as exc:
+        detail = _report_error_from_group(exc)
+        if detail:
+            raise HTTPException(status_code=502, detail=detail) from exc
+        raise
 
     return GenerateMdDocResponse(
         **result,
