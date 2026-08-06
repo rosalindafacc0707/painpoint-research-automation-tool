@@ -13,6 +13,7 @@ from config import (
     OLLAMA_MODEL,
     OLLAMA_NUM_CTX,
     OLLAMA_TEMPERATURE,
+    OLLAMA_THINK,
     OLLAMA_TIMEOUT_SECONDS,
 )
 from providers.base import RunResult
@@ -51,11 +52,24 @@ def _tool_arguments(arguments) -> dict:
     raise ValueError("Tool arguments must be a JSON object.")
 
 
-async def run_agent(session: ClientSession, system_prompt: str, company_input: str) -> RunResult:
+async def run_agent(
+    session: ClientSession | None,
+    system_prompt: str,
+    company_input: str,
+    *,
+    model: str | None = None,
+    enable_tools: bool = True,
+) -> RunResult:
     """Run the local model and execute any requested local MCP tools."""
-    await session.initialize()
-    mcp_tools = (await session.list_tools()).tools
-    tools = _mcp_tools_to_ollama(mcp_tools)
+    model_name = model or OLLAMA_MODEL
+
+    tools: list[dict] = []
+    if enable_tools:
+        if session is None:
+            raise ValueError("enable_tools=True requires an MCP session.")
+        await session.initialize()
+        mcp_tools = (await session.list_tools()).tools
+        tools = _mcp_tools_to_ollama(mcp_tools)
     messages: list[dict] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": company_input},
@@ -74,9 +88,10 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
                 http_response = await client.post(
                     endpoint,
                     json={
-                        "model": OLLAMA_MODEL,
+                        "model": model_name,
                         "messages": messages,
                         "tools": tools,
+                        "think": OLLAMA_THINK,
                         "stream": False,
                         "keep_alive": "10m",
                         "options": request_options,
@@ -92,6 +107,7 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
                 # The exact assistant tool-call message must appear in history
                 # before the tool-role responses.
                 messages.append(assistant_message)
+                assert session is not None  # tool_calls is non-empty only when enable_tools=True
 
                 async def _run(call):
                     function = call.get("function") or {}
@@ -110,20 +126,20 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
                 messages.extend(await asyncio.gather(*(_run(call) for call in tool_calls)))
     except httpx.ConnectError as exc:
         raise RuntimeError(
-            f"Cannot reach Ollama at {OLLAMA_BASE_URL}. Start Ollama and pull {OLLAMA_MODEL}."
+            f"Cannot reach Ollama at {OLLAMA_BASE_URL}. Start Ollama and pull {model_name}."
         ) from exc
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text[:500]
         raise RuntimeError(f"Ollama chat request failed ({exc.response.status_code}): {detail}") from exc
 
     if response is None:
-        return RunResult(text="", model=OLLAMA_MODEL, stop_reason=None)
+        return RunResult(text="", model=model_name, stop_reason=None)
 
     message = response.get("message") or {}
     stop_reason = response.get("done_reason")
     return RunResult(
         text=message.get("content") or "",
-        model=response.get("model") or OLLAMA_MODEL,
+        model=response.get("model") or model_name,
         stop_reason=stop_reason,
         truncated=stop_reason in {"length", "max_tokens"},
     )

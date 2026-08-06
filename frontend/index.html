@@ -215,17 +215,42 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
             <div class="field"><label>Department / business unit</label><input class="input" id="in-dept" type="text" placeholder="e.g. Global Marketing"></div>
             <div class="field"><label>Industry</label><input class="input" id="in-industry" type="text" placeholder="e.g. Food delivery"></div>
             <div class="field" style="grid-column:1/-1"><label>Specific research lens</label><input class="input" id="in-lens" type="text" placeholder="Default: Content Value Chain / Marketing Operations"></div>
-            <div class="field" style="grid-column:1/-1">
-              <label>Provider</label>
-              <select class="input" id="in-provider">
-                <option value="">Server default (config.py PROVIDER)</option>
-                <option value="anthropic">Anthropic (Claude)</option>
-                <option value="azure">Azure OpenAI</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="gemma">Google Gemma</option>
-                <option value="ollama">Local Qwen (Ollama)</option>
-                <option value="groq">Groq (GPT-OSS 120B — fast)</option>
-              </select>
+            <div id="multiagent-fields" style="grid-column:1/-1">
+              <div class="field-row">
+                <div class="field">
+                  <label>Research agents — provider</label>
+                  <select class="input" id="in-research-provider">
+                    <option value="">Server default (see .env.development)</option>
+                    <option value="ollama">Local Qwen (Ollama — free, local, no rate limit)</option>
+                    <option value="gemini">Google Gemini (free tier, may rate-limit under 8x parallel)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="azure">Azure OpenAI</option>
+                    <option value="groq">Groq (GPT-OSS 120B — free, fast, tight rate limit)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Research agents — model (optional)</label>
+                  <input class="input" id="in-research-model" type="text" placeholder="Provider default">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Synthesis agent — provider</label>
+                  <select class="input" id="in-synthesis-provider">
+                    <option value="">Server default (see .env.development)</option>
+                    <option value="ollama">Local Qwen (Ollama — free, local, no rate limit)</option>
+                    <option value="gemini">Google Gemini (free tier, may rate-limit under 8x parallel)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="azure">Azure OpenAI</option>
+                    <option value="groq">Groq (GPT-OSS 120B — free, fast, tight rate limit)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Synthesis agent — model (optional)</label>
+                  <input class="input" id="in-synthesis-model" type="text" placeholder="Provider default">
+                </div>
+              </div>
+              <div class="rule-note" style="margin-top:0"><i data-lucide="info" style="width:14px;height:14px"></i><span>Runs one research agent per CVC topic in parallel, then a separate synthesis agent writes the final report from their combined findings. Pick a fast/cheap model for research and a stronger one for synthesis, or mix providers.</span></div>
             </div>
           </div>
           <button type="button" class="btn btn-primary btn-block" id="btn-run" style="min-height:44px;font-size:15px"><i data-lucide="search" style="width:16px;height:16px"></i>Run research</button>
@@ -269,7 +294,7 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
 <script>
 // Cosmetic only: the backend is one synchronous call with no progress
 // events, so this list just gives the user something to look at while
-// generate-pain-point-md is running.
+// generate-pain-point-md-multiagent is running.
 const RESEARCH_TOPICS = ["Marketing transformation programs","Content workflow and operating model","Governance and brand control","Global rollout / global-to-local model","Embedded teams and organisation structure","Data ownership","Brand integrity","AI in marketing"];
 
 // Shown one at a time, on a loop, once the step list has finished animating
@@ -396,7 +421,7 @@ function mdToHtml(md){
   return html;
 }
 
-// Maps the intake form onto schemas.requests.GenerateMdDocRequest.
+// Maps the intake form onto schemas.requests.GenerateMdDocRequestMultiAgent.
 function buildBackendPayload(input){
   return {
     company_name: input.company,
@@ -405,9 +430,14 @@ function buildBackendPayload(input){
     department: input.dept || null,
     industry: input.industry || null,
     research_lens: input.lens || null,
-    provider: input.provider || null,
+    research_provider: input.researchProvider || null,
+    research_model: input.researchModel || null,
+    synthesis_provider: input.synthesisProvider || null,
+    synthesis_model: input.synthesisModel || null,
   };
 }
+
+const BACKEND_ENDPOINT = '/painpoint-researcher/generate-pain-point-md-multiagent';
 
 async function extractError(res){
   const text = await res.text().catch(()=>'');
@@ -418,12 +448,12 @@ async function extractError(res){
   return `${res.status}${text ? ': ' + text.slice(0,200) : ''}`;
 }
 
-// POST /painpoint-researcher/generate-pain-point-md returns metadata + a
+// POST /painpoint-researcher/generate-pain-point-md-multiagent returns metadata + a
 // download_url — the report body itself is only readable from that second
 // endpoint (routers.py streams the .md file straight off disk), so this
 // takes two round trips.
 async function callBackend(input){
-  const genRes = await fetch(`${window.RESEARCH_API_BASE}/painpoint-researcher/generate-pain-point-md`, {
+  const genRes = await fetch(`${window.RESEARCH_API_BASE}${BACKEND_ENDPOINT}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(buildBackendPayload(input)),
@@ -486,8 +516,8 @@ document.getElementById('toggle-optional').addEventListener('click', ()=>{
 });
 
 function resetIntake(){
-  ['in-company','in-website','in-region','in-dept','in-industry','in-lens'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('in-provider').value = '';
+  ['in-company','in-website','in-region','in-dept','in-industry','in-lens','in-research-model','in-synthesis-model'].forEach(id=>document.getElementById(id).value='');
+  ['in-research-provider','in-synthesis-provider'].forEach(id=>document.getElementById(id).value='');
   showView('intake');
 }
 document.getElementById('btn-new').addEventListener('click', resetIntake);
@@ -503,24 +533,30 @@ document.getElementById('btn-run').addEventListener('click', ()=>{
     dept: document.getElementById('in-dept').value.trim(),
     industry: document.getElementById('in-industry').value.trim(),
     lens: document.getElementById('in-lens').value.trim(),
-    provider: document.getElementById('in-provider').value,
+    researchProvider: document.getElementById('in-research-provider').value,
+    researchModel: document.getElementById('in-research-model').value.trim(),
+    synthesisProvider: document.getElementById('in-synthesis-provider').value,
+    synthesisModel: document.getElementById('in-synthesis-model').value.trim(),
   };
   runResearch(input);
 });
 
 function runResearch(input){
   document.getElementById('progress-company').textContent = input.company;
+  document.getElementById('progress-kicker').textContent = 'Researching (multi-agent: parallel + synthesis)';
   document.getElementById('console').innerHTML = '';
   document.getElementById('progress-fill').style.width = '0%';
   document.getElementById('progress-error').style.display = 'none';
   document.getElementById('tips-carousel').classList.remove('visible');
+  const stepLabels = [...RESEARCH_TOPICS, 'Synthesis — writing final report'];
   const stepsList = document.getElementById('steps-list');
-  stepsList.innerHTML = RESEARCH_TOPICS.map((t,idx)=>`<div class="step" id="step-${idx}"><div class="step-dot"><i data-lucide="circle" style="width:11px;height:11px"></i></div><div class="step-label">${t}</div></div>`).join('');
+  stepsList.innerHTML = stepLabels.map((t,idx)=>`<div class="step" id="step-${idx}"><div class="step-dot"><i data-lucide="circle" style="width:11px;height:11px"></i></div><div class="step-label">${t}</div></div>`).join('');
   if(window.lucide) lucide.createIcons();
   showView('progress');
 
-  const total = RESEARCH_TOPICS.length;
-  let i = 0, settled = false, tipsInterval = null, lastTipIdx = -1;
+  const total = stepLabels.length;
+  const topicCount = RESEARCH_TOPICS.length;
+  let settled = false, tipsInterval = null, lastTipIdx = -1;
   const consoleEl = document.getElementById('console');
   function log(text, cls){
     const d = document.createElement('div'); d.className = 'ln '+(cls||''); d.textContent = text;
@@ -551,23 +587,34 @@ function runResearch(input){
     if(tipsInterval){ clearInterval(tipsInterval); tipsInterval = null; }
     document.getElementById('tips-carousel').classList.remove('visible');
   }
-  function animate(){
+  // Research runs all topics concurrently, then a separate synthesis agent —
+  // every topic step goes active at once and finishes on its own independent
+  // (randomized) timer, then the synthesis step lights up and stays
+  // active/pulsing until the real backend call resolves.
+  function animateParallel(){
     if(settled) return;
-    if(i >= total){ startTips(); return; }
-    const topic = RESEARCH_TOPICS[i];
-    document.getElementById('step-'+i).classList.add('active');
-    log(`researching: ${topic.toLowerCase()}`, 'q');
-    setTimeout(()=>{
-      if(settled) return;
-      markDone(i);
-      if(window.lucide) lucide.createIcons();
-      i++;
-      document.getElementById('progress-fill').style.width = Math.round((i/total)*100)+'%';
-      log(`✓ ${topic} — noted`, 'ok');
-      animate();
-    }, 900 + Math.random()*500);
+    log(`researching ${topicCount} topics in parallel…`, 'q');
+    for(let k=0;k<topicCount;k++) document.getElementById('step-'+k).classList.add('active');
+    if(window.lucide) lucide.createIcons();
+    let done = 0;
+    for(let k=0;k<topicCount;k++){
+      setTimeout(()=>{
+        if(settled) return;
+        markDone(k);
+        if(window.lucide) lucide.createIcons();
+        done++;
+        document.getElementById('progress-fill').style.width = Math.round((done/total)*100)+'%';
+        log(`✓ ${RESEARCH_TOPICS[k]} — noted`, 'ok');
+        if(done === topicCount){
+          document.getElementById('step-'+topicCount).classList.add('active');
+          if(window.lucide) lucide.createIcons();
+          log('→ synthesizing final report…', 'q');
+          startTips();
+        }
+      }, 700 + Math.random()*2200);
+    }
   }
-  animate();
+  animateParallel();
 
   callBackend(input).then(({meta, markdown})=>{
     settled = true;

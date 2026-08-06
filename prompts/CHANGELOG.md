@@ -1,5 +1,59 @@
 # Prompt Changelog
 
+## v8 — 2026-08-06 — groq and gemma removed as providers
+- Both `providers/groq_provider.py` and `providers/gemma_provider.py` are
+  removed: in real use, both kept tripping their free-tier rate limits under
+  this project's load (8 parallel research agents + 1 synthesis agent per
+  report fire enough simultaneous requests to exhaust a low RPM/RPD
+  allowance fast). `groq` and `gemma` are dropped from
+  `providers/base.py`'s PROVIDER_MODULES, `schemas/requests.py`'s
+  ProviderName, config.py, `.env.example`/`.env.development`, the frontend
+  provider dropdowns, and `scripts/run_prompt_test.py`'s `--research-provider`/
+  `--synthesis-provider` choices. The two module files themselves are moved
+  to `providers/_removed/` (kept for reference only, not imported by
+  anything) — see the note in that folder if you want to delete them
+  outright.
+- `RESEARCH_AGENT_PROVIDER`/`SYNTHESIS_AGENT_PROVIDER` now default to
+  `ollama`: the only remaining option with NO external rate limit at all,
+  since inference runs on this machine — the 8 parallel research agents
+  queue locally instead of failing. `gemini` remains available as a faster
+  hosted alternative, but its free-tier requests-per-minute cap can hit the
+  same wall under 8-way parallelism; `anthropic`, `azure`, and `cerebras`
+  (opt-in, see v7.1) are also still configurable per role.
+- No change to prompt wording or report scope.
+
+## v7.1 — 2026-08-06 — Cerebras un-defaulted
+- Correction to v7 below: Cerebras' signup asks for a payment method even on
+  its "free" plan, so it's unsuitable as a no-cost default for this project.
+  `providers/cerebras_provider.py` stays in the codebase as an opt-in
+  provider, but `RESEARCH_AGENT_PROVIDER`/`SYNTHESIS_AGENT_PROVIDER` default
+  back to `groq` (verified free tier, no card required) in both config.py
+  and .env.development. (Superseded by v8 above: groq itself was removed
+  the same day after also hitting rate limits.)
+
+## v7 — 2026-08-06 — single-agent path retired
+- The single-agent system prompt (this file's history below, v1-v6) and its
+  test script have been retired: the project now runs ONLY the multi-agent
+  architecture (prompts/multiagent_research_prompt.md +
+  prompts/multiagent_synthesis_prompt.md, orchestrated by
+  services/multiagent_service.py). This isn't a scope change to the report
+  itself — the multi-agent prompts already carry forward every rule from v6
+  (evidence discipline, the 6 CVC steps, severity/confidence labeling,
+  commercial layer) — it removes a second, now-redundant code path
+  (scripts/run_prompt_test.py used to load prompts/system_prompt_vN.md
+  directly) that added maintenance surface without adding capability.
+- `prompts/system_prompt_v1.md` through `v6.md` are preserved under
+  `prompts/_deprecated/` for reference (e.g. to diff prompt wording against
+  the multi-agent prompts) but are not read by any code path anymore.
+- Also in this pass: added a Cerebras provider (providers/cerebras_provider.py)
+  as the new default for both agent roles — same open-weight model as the
+  Groq provider, run on faster hardware with a more generous free tier — and
+  switched source discovery to the Tavily Search API when TAVILY_API_KEY is
+  set (mcp_server/scraper_server.py), falling back to the existing
+  ddgs-based metasearch when it isn't. Neither change touches prompt wording
+  or report scope — see README.md "Performance and provider changes" for the
+  rationale on both.
+
 ## v6 — 2026-07-28
 - Runtime performance pass, no change to research scope or evidence
   standards: added a "Batch independent tool calls" rule to Tools available
@@ -93,7 +147,8 @@
 
 ---
 
-Incrementare questa versione (e creare un nuovo file
-`prompts/system_prompt_vN.md`) ogni volta che il system prompt viene
-modificato in modo sostanziale. Conservare le versioni precedenti per poter
-confrontare gli output durante la Fase 1.
+Incrementare PROMPT_VERSION (config.py) e aggiungere una voce qui ogni volta
+che uno dei due prompt multi-agente (`prompts/multiagent_research_prompt.md`,
+`prompts/multiagent_synthesis_prompt.md`) viene modificato in modo
+sostanziale. Le voci v1-v6 sopra documentano la storia del prompt
+single-agent, ormai ritirato — vedi v7.

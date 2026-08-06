@@ -83,17 +83,29 @@ def _extract_text(response) -> str:
     return "".join(parts)
 
 
-async def run_agent(session: ClientSession, system_prompt: str, company_input: str) -> RunResult:
+async def run_agent(
+    session: ClientSession | None,
+    system_prompt: str,
+    company_input: str,
+    *,
+    model: str | None = None,
+    enable_tools: bool = True,
+) -> RunResult:
     """Drive the agentic loop until the model finishes; return the final text."""
-    if not (AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT):
+    deployment = model or AZURE_OPENAI_DEPLOYMENT
+    if not (AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT and deployment):
         raise RuntimeError(
             "Azure AI Foundry is not configured. Set AZURE_OPENAI_API_KEY (.env), "
             "AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT (.env.development)."
         )
 
-    await session.initialize()
-    mcp_tools = (await session.list_tools()).tools  # web_search_ddg + fetch_url
-    tools = _mcp_tools_to_responses(mcp_tools)
+    tools: list[dict] = []
+    if enable_tools:
+        if session is None:
+            raise ValueError("enable_tools=True requires an MCP session.")
+        await session.initialize()
+        mcp_tools = (await session.list_tools()).tools  # web_search_ddg + fetch_url
+        tools = _mcp_tools_to_responses(mcp_tools)
 
     client = AsyncOpenAI(base_url=AZURE_OPENAI_ENDPOINT, api_key=AZURE_OPENAI_API_KEY)
 
@@ -105,7 +117,7 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
     response = None
     for _ in range(MAX_ITERATIONS):
         response = await client.responses.create(
-            model=AZURE_OPENAI_DEPLOYMENT,
+            model=deployment,
             instructions=system_prompt,
             input=input_items,
             tools=tools,
@@ -148,7 +160,7 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
         break
 
     if response is None:
-        return RunResult(text="", model=AZURE_OPENAI_DEPLOYMENT, stop_reason=None)
+        return RunResult(text="", model=deployment, stop_reason=None)
 
     truncated = (
         response.status == "incomplete"
@@ -156,7 +168,7 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
     )
     return RunResult(
         text=_extract_text(response),
-        model=AZURE_OPENAI_DEPLOYMENT,
+        model=deployment,
         stop_reason=response.status,
         truncated=truncated,
     )

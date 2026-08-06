@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from schemas.requests import GenerateMdDocRequest
+from schemas.requests import GenerateMdDocRequestMultiAgent
 from schemas.responses import GenerateMdDocResponse
-from services.report_service import OUTPUTS_DIR, generate_pain_point_report
+from services.multiagent_service import OUTPUTS_DIR, generate_pain_point_report_multiagent
 
 router = APIRouter(prefix="/painpoint-researcher", tags=["research"])
 
@@ -25,10 +25,11 @@ def _report_error_from_group(exc: ExceptionGroup) -> str | None:
     return None
 
 
-@router.post("/generate-pain-point-md", response_model=GenerateMdDocResponse)
-async def generate(body: GenerateMdDocRequest):
+@router.post("/generate-pain-point-md-multiagent", response_model=GenerateMdDocResponse)
+async def generate_multiagent(body: GenerateMdDocRequestMultiAgent):
+    """Multi-agent variant: parallel per-topic research agents + one synthesis agent."""
     try:
-        result = await generate_pain_point_report(body)
+        result = await generate_pain_point_report_multiagent(body)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except ExceptionGroup as exc:

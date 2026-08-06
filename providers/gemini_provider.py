@@ -4,6 +4,7 @@ import asyncio
 import sys
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 from mcp import ClientSession
 
@@ -11,6 +12,25 @@ from config import GEMINI_API_KEY, GEMINI_MODEL, MAX_TOKENS
 from providers.base import RunResult
 
 MAX_ITERATIONS = 40
+
+# Transient 429/5xx from Google's backend are common enough under concurrent
+# multi-agent load that a bare retry (same request) resolves most of them.
+MAX_MODEL_RETRIES = 3
+_RETRYABLE_CODES = {429, 500, 502, 503, 504}
+
+
+async def _generate_with_retry(client, **kwargs):
+    for attempt in range(MAX_MODEL_RETRIES):
+        try:
+            return await client.aio.models.generate_content(**kwargs)
+        except genai_errors.APIError as exc:
+            if exc.code not in _RETRYABLE_CODES or attempt == MAX_MODEL_RETRIES - 1:
+                raise
+            print(
+                f"  ⟲ retrying Gemini request after {exc.code} ({attempt + 1}/{MAX_MODEL_RETRIES})",
+                file=sys.stderr,
+            )
+            await asyncio.sleep(1.5 * (attempt + 1))
 
 
 def _mcp_tools_to_gemini(mcp_tools) -> list[types.FunctionDeclaration]:
@@ -48,12 +68,13 @@ def _response_content(response):
 
 
 async def run_agent(
-    session: ClientSession,
+    session: ClientSession | None,
     system_prompt: str,
     company_input: str,
     *,
     api_key: str | None = None,
     model: str | None = None,
+    enable_tools: bool = True,
 ) -> RunResult:
     """Run a Google-hosted model and the local MCP tools until completion."""
     api_key = api_key or GEMINI_API_KEY
@@ -61,9 +82,13 @@ async def run_agent(
     if not api_key:
         raise RuntimeError("Gemini is not configured. Set GEMINI_API_KEY in the .env file.")
 
-    await session.initialize()
-    mcp_tools = (await session.list_tools()).tools
-    tools = [types.Tool(function_declarations=_mcp_tools_to_gemini(mcp_tools))]
+    tools = None
+    if enable_tools:
+        if session is None:
+            raise ValueError("enable_tools=True requires an MCP session.")
+        await session.initialize()
+        mcp_tools = (await session.list_tools()).tools
+        tools = [types.Tool(function_declarations=_mcp_tools_to_gemini(mcp_tools))]
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
         tools=tools,
@@ -74,11 +99,15 @@ async def run_agent(
 
     response = None
     for _ in range(MAX_ITERATIONS):
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=contents,
-            config=config,
-        )
+        try:
+            response = await _generate_with_retry(
+                client,
+                model=model,
+                contents=contents,
+                config=config,
+            )
+        except genai_errors.APIError as exc:
+            raise RuntimeError(f"Gemini request failed ({exc.code}): {exc.message}") from exc
         calls = _function_calls(response)
         if not calls:
             break

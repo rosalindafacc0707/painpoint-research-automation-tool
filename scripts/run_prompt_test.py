@@ -1,159 +1,124 @@
 #!/usr/bin/env python3
 """
-Script for the manual test of Phase 1 (Prompt Prototyping).
+Manual test script for the multi-agent pipeline (Phase 1 — Prompt Prototyping).
+
+This project has only one agent architecture: N parallel per-topic research
+agents + one synthesis agent (services/multiagent_service.py). There used to
+be a separate single-agent script that loaded prompts/system_prompt_vN.md
+directly — it has been removed; those prompt files now live under
+prompts/_deprecated/ for historical reference only, and the CHANGELOG entry
+at the top of prompts/CHANGELOG.md explains why.
 
 Usage:
-    python scripts/run_prompt_test.py inputs/sample_company_input.md
-    python scripts/run_prompt_test.py inputs/sample_company_input.md --company "Acme Corp"
-    python scripts/run_prompt_test.py inputs/sample_company_input.md --provider azure
+    python scripts/run_prompt_test.py --company "Acme Corp"
+    python scripts/run_prompt_test.py --company "Acme Corp" --website acme.com --region EMEA
+    python scripts/run_prompt_test.py --company "Acme Corp" --research-provider gemini --synthesis-provider ollama
 
-It's not an automatic pipeline: useful just to validate the system prompt on
-single real companies, one company each execution. The result always requires
-human review before every commercial use.
+It's not an automatic pipeline: useful just to validate the two multi-agent
+prompts on single real companies, one company each execution. The result
+always requires human review before every commercial use.
 
-Provider switch (PROVIDER in .env.development, or --provider on the CLI):
-  - "anthropic" (default) — Claude, with its server-side web_search tool for
-    discovery plus the local fetch_url MCP tool for reading pages.
-  - "azure" — an Azure OpenAI / Azure AI Foundry deployment. Since Azure
-    OpenAI has no built-in web search, this path uses TWO local MCP tools
-    instead: web_search_ddg (discovery) and fetch_url (reading). See
-    providers/azure_provider.py for required config and setup notes.
-  - "gemini" — Google Gemini API, using the same local MCP research tools as
-    Azure. See providers/gemini_provider.py for required configuration.
-  - "gemma" — Google-hosted Gemma, using the same local MCP research tools.
-  - "ollama" — local open-weight model (default: qwen3.5:9b), using local
-    Ollama and the same MCP research tools. No API key is required.
-  - "groq" — high-speed hosted open-weight GPT-OSS 120B with the same local
-    MCP research tools. Requires GROQ_API_KEY.
+Provider switch (RESEARCH_AGENT_PROVIDER / SYNTHESIS_AGENT_PROVIDER in
+.env.development, or --research-provider / --synthesis-provider on the CLI):
+  - "ollama" (default for both roles) — local open-weight model (default:
+    qwen3.5:9b). No API key required, and no external rate limit at all
+    since nothing leaves this machine — the 8 parallel research agents just
+    queue locally instead of failing.
+  - "gemini" — Google-hosted model, free tier; its requests-per-minute cap
+    can still be tight under 8-way parallel load.
+  - "anthropic" — Claude, with its server-side web_search tool for discovery
+    plus the local fetch_url MCP tool for reading pages.
+  - "azure" — an Azure OpenAI / Azure AI Foundry deployment.
+  - "groq" — openai/gpt-oss-120b on Groq's LPU hardware, free tier, no
+    payment method required. Much faster than ollama, but the tightest free
+    budget of any provider here (~30 RPM / 8k TPM / 1k RPD for this model);
+    providers/groq_provider.py paces requests to stay under the RPM cap and
+    compacts older tool results to stay under the TPM one. Not
+    llama-3.3-70b-versatile: verified live, that model's tool-calling on
+    Groq is unreliable (~1 in 6 tool-enabled requests emits a malformed tag
+    instead of a real tool call) — see the module docstring for the full
+    writeup; it remains available via GROQ_MODEL but is only safe for the
+    synthesis role (no tools).
 
-In every case, the MCP server (mcp_server/scraper_server.py) is launched once as
-a stdio subprocess and its tools are handed to whichever provider is active.
+gemma and cerebras were removed (2026-08-06): gemma kept tripping its
+free-tier rate limits under this project's 8-parallel-agents load — see
+prompts/CHANGELOG.md v8. cerebras' "free" plan requires a payment method at
+signup, so it was never actually free. groq was removed for the same reason
+as gemma and re-added the same day, initially pointed at
+llama-3.3-70b-versatile with a TPM budget guard, then moved to
+openai/gpt-oss-120b once that model's tool-calling proved unreliable.
+
+Each of the 8 parallel research-agent subprocesses and the synthesis agent
+launch their own MCP server (mcp_server/scraper_server.py) as a stdio
+subprocess — see services/multiagent_service.py for the orchestration.
 """
 
 import argparse
 import asyncio
 import sys
-from datetime import datetime
 from pathlib import Path
-
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from config import ANTHROPIC_API_KEY, PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH  # noqa: E402
-from services.docx_export import markdown_to_docx  # noqa: E402
-
-SCRAPER_SERVER = ROOT / "mcp_server" / "scraper_server.py"
-
-
-def load_text(path: Path) -> str:
-    if not path.exists():
-        raise FileNotFoundError(f"File non trovato: {path}")
-    return path.read_text(encoding="utf-8")
-
-
-def slugify(text: str) -> str:
-    return "".join(c if c.isalnum() else "_" for c in text.strip().lower()).strip("_")
+from config import PROMPT_VERSION  # noqa: E402
+from schemas.requests import GenerateMdDocRequestMultiAgent  # noqa: E402
+from services.multiagent_service import generate_pain_point_report_multiagent  # noqa: E402
 
 
 async def main_async(args) -> None:
-    provider = args.provider or PROVIDER
-
-    if provider == "anthropic":
-        if not ANTHROPIC_API_KEY:
-            sys.exit("ANTHROPIC_API_KEY not set. Check for it in the .env file")
-        from providers.anthropic_provider import run_agent
-    elif provider == "azure":
-        from providers.azure_provider import run_agent
-    elif provider == "gemini":
-        from providers.gemini_provider import run_agent
-    elif provider == "gemma":
-        from providers.gemma_provider import run_agent
-    elif provider == "ollama":
-        from providers.ollama_provider import run_agent
-    elif provider == "groq":
-        from providers.groq_provider import run_agent
-    else:
-        sys.exit(
-            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, or groq."
-        )
-
-    system_prompt = load_text(ROOT / SYSTEM_PROMPT_PATH)
-
-    # "Agent version" reuses PROMPT_VERSION (no separate versioned pipeline in
-    # this phase). Injected at runtime, along with provider and run date, so
-    # the model has real values to report in the header instead of
-    # inventing something plausible-sounding.
-    run_metadata = (
-        "\n\n## Run metadata (report this exactly in the report header)\n"
-        f"- Prompt version: {PROMPT_VERSION}\n"
-        f"- Agent version: {PROMPT_VERSION}\n"
-        f"- Provider: {provider}\n"
-        f"- Date of run: {datetime.now().strftime('%Y-%m-%d')}\n"
-    )
-    system_prompt += run_metadata
-
-    company_input = load_text(Path(args.input_file))
-
-    server_params = StdioServerParameters(
-        command=sys.executable,
-        args=[str(SCRAPER_SERVER)],
+    request = GenerateMdDocRequestMultiAgent(
+        company_name=args.company,
+        website=args.website,
+        country_region=args.region,
+        department=args.department,
+        industry=args.industry,
+        research_lens=args.lens,
+        research_provider=args.research_provider,
+        research_model=args.research_model,
+        synthesis_provider=args.synthesis_provider,
+        synthesis_model=args.synthesis_model,
     )
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            result = await run_agent(session, system_prompt, company_input)
+    result = await generate_pain_point_report_multiagent(request)
 
-    if not result.text:
-        sys.exit("No response produced.")
+    report_path = ROOT / "outputs" / result["filename"]
+    docx_path = ROOT / "outputs" / result["docx_filename"]
 
-    if result.truncated:
-        print(
-            "WARNING: output hit max_tokens/length and may be truncated. "
-            "Consider raising MAX_TOKENS in .env.development.",
-            file=sys.stderr,
-        )
-    if result.stop_reason == "refusal":
-        sys.exit("The model refused the request (stop_reason=refusal).")
-
-    company_slug = slugify(args.company) if args.company else "company"
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    outputs_dir = ROOT / "outputs"
-    outputs_dir.mkdir(exist_ok=True)
-    base_name = f"{company_slug}_{PROMPT_VERSION}_{provider}_{timestamp}"
-    output_path = outputs_dir / f"{base_name}.md"
-    output_path.write_text(result.text, encoding="utf-8")
-
-    docx_path = outputs_dir / f"{base_name}.docx"
-    markdown_to_docx(result.text).save(docx_path)
-
-    print(result.text)
-    print(f"\n---\nOutput salvato in: {output_path} e {docx_path}")
-    print(f"Provider: {provider} | Model: {result.model} | Prompt version: {PROMPT_VERSION}")
+    print(report_path.read_text(encoding="utf-8"))
+    print(f"\n---\nOutput salvato in: {report_path} e {docx_path}")
+    print(f"Provider: {result['provider']} | Model: {result['model']} | Prompt version: {PROMPT_VERSION}")
     print("Note: mandatory human review before every commercial use.")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Manual test of the system prompt on a single company (Phase 1)."
+        description="Manual test of the multi-agent pipeline on a single company (Phase 1)."
     )
+    parser.add_argument("--company", required=True, help="Company name (mandatory field).")
+    parser.add_argument("--website", default=None, help="Company website (optional).")
+    parser.add_argument("--region", default=None, help="Country / region (optional).")
+    parser.add_argument("--department", default=None, help="Department / business unit (optional).")
+    parser.add_argument("--industry", default=None, help="Industry (optional).")
     parser.add_argument(
-        "input_file",
-        help="File path with the company's intake information.",
-    )
-    parser.add_argument(
-        "--company",
+        "--lens",
         default=None,
-        help="Company name (used to rename the output file).",
+        help="Specific research lens, only if it differs from the default CVC (optional).",
     )
     parser.add_argument(
-        "--provider",
-        choices=["anthropic", "azure", "gemini", "gemma", "ollama", "groq"],
+        "--research-provider",
+        choices=["anthropic", "azure", "gemini", "ollama", "groq"],
         default=None,
-        help="Override PROVIDER from .env.development for this run.",
+        help="Override RESEARCH_AGENT_PROVIDER for this run.",
     )
+    parser.add_argument("--research-model", default=None, help="Model override for the research agents.")
+    parser.add_argument(
+        "--synthesis-provider",
+        choices=["anthropic", "azure", "gemini", "ollama", "groq"],
+        default=None,
+        help="Override SYNTHESIS_AGENT_PROVIDER for this run.",
+    )
+    parser.add_argument("--synthesis-model", default=None, help="Model override for the synthesis agent.")
     args = parser.parse_args()
     asyncio.run(main_async(args))
 

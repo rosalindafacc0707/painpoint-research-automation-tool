@@ -11,9 +11,9 @@ trafilatura>=1.12.0
 ddgs>=9.0.0
 pypdf>=5.0.0
 
-# Azure OpenAI / Azure AI Foundry provider switch (PROVIDER=azure in
-# .env.development) — talks to your Azure OpenAI deployment via the
-# AsyncAzureOpenAI client.
+# Used by providers/azure_provider.py and providers/groq_provider.py (Azure
+# OpenAI / Azure AI Foundry and Groq, both via the plain OpenAI client's
+# OpenAI-compatible chat.completions surface).
 openai>=1.50.0
 
 google-genai>=1.0.0
