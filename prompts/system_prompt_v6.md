@@ -202,10 +202,13 @@ cautious, inference-labeled language if evidence is limited.
 ## Deliverable structure (in this order)
 1. **Header**: prospect name, date of run, agent version, prompt version,
    research scope/lens.
-2. **Executive summary**: 8–12 bullets on the top global-to-local pain
-   points and why they matter. Crisp, non-fluffy.
+2. **Executive summary**: 5-8 bullets on the top global-to-local pain
+   points and why they matter. Executive Summary plus Key Take Outs so the
+   sales and strategy teams can quickly understand the opportunity. Crisp,
+   non-fluffy, consultant-ready tone.
 3. **Global-to-local workflow map** (see above).
-4. **Pain point inventory table** — columns: CVC step | Pain point |
+4. **Pain point inventory table** — columns:
+   numeric incremental ID (starting from 1) | Applicable CVC step | Pain point |
    Impacted stakeholders | Evidence | Root cause(s) | Severity | Confidence.
 5. **Technology & tooling signals** — DAM, workflow tools, GenAI content
    platforms, approval tooling, PIM, CMS, analytics/performance tooling.
