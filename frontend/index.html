@@ -490,9 +490,50 @@ function docxUrlFor(meta){
   return (meta && meta.docx_download_url) ? `${window.RESEARCH_API_BASE}${meta.docx_download_url}` : null;
 }
 
-function renderHistory(activeId){
-  const hist = loadHistory();
+// GET /painpoint-researcher/reports — Supabase-backed index of every report
+// ever generated (see services/storage_service.py), shared across every
+// browser/device. Returns [] when Supabase isn't configured, in which case
+// renderHistory() below falls back to the old browser-local history.
+async function fetchServerReports(){
+  try{
+    const res = await fetch(`${window.RESEARCH_API_BASE}/painpoint-researcher/reports`);
+    if(!res.ok) return [];
+    return await res.json();
+  }catch(e){ return []; }
+}
+
+async function openServerReport(report){
+  const meta = {
+    provider: report.provider, model: report.model, prompt_version: report.prompt_version,
+    stop_reason: report.stop_reason, truncated: report.truncated,
+    docx_download_url: `/painpoint-researcher/reports/${report.id}/download?kind=docx`,
+  };
+  currentCompany = report.company_name; currentDocxUrl = docxUrlFor(meta);
+  const res = await fetch(`${window.RESEARCH_API_BASE}/painpoint-researcher/reports/${report.id}/content`);
+  const markdown = await res.text();
+  document.getElementById('report-title').textContent = `${report.company_name} — pain-point report`;
+  document.getElementById('report-body').innerHTML = renderReportHTML(meta, markdown);
+  if(window.lucide) lucide.createIcons();
+  renderHistory(report.id);
+  showView('report');
+}
+
+async function renderHistory(activeId){
   const list = document.getElementById('history-list');
+  const serverReports = await fetchServerReports();
+
+  if(serverReports.length){
+    list.innerHTML = serverReports.map(r=>`<div class="history-item ${r.id===activeId?'active':''}" data-id="${r.id}">
+        <span class="hi-name">${r.company_name}</span><span class="hi-meta">${(r.created_at||'').slice(0,10)}</span></div>`).join('');
+    list.querySelectorAll('.history-item').forEach(el=>el.addEventListener('click', ()=>{
+      const report = serverReports.find(r=>r.id===el.dataset.id);
+      if(report) openServerReport(report);
+    }));
+    return;
+  }
+
+  // Fallback: Supabase not configured — same browser-local history as before.
+  const hist = loadHistory();
   if(!hist.length){ list.innerHTML = '<div class="history-empty">No runs yet — your first report will show up here.</div>'; return; }
   list.innerHTML = hist.map(h=>`<div class="history-item ${h.id===activeId?'active':''}" data-id="${h.id}">
       <span class="hi-name">${h.company}</span><span class="hi-meta">${h.date}</span></div>`).join('');
@@ -623,7 +664,12 @@ function runResearch(input){
     document.getElementById('progress-fill').style.width = '100%';
     if(window.lucide) lucide.createIcons();
     log('✓ report received from backend', 'ok');
-    const id = Date.now().toString(36);
+    // When Supabase is configured, download_url already carries the
+    // reports/{id}/download shape (see services/multiagent_service.py) —
+    // reuse that id so this run highlights as "active" in the server-backed
+    // history rendered right below, instead of falling out of sync with it.
+    const serverIdMatch = meta && meta.download_url && meta.download_url.match(/\/reports\/([^/]+)\/download/);
+    const id = (serverIdMatch && serverIdMatch[1]) || Date.now().toString(36);
     const date = new Date().toISOString().slice(0,10);
     const hist = loadHistory();
     hist.unshift({ id, company:input.company, date, markdown, meta });

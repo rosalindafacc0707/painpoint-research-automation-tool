@@ -144,3 +144,23 @@ SYNTHESIS_AGENT_MODEL = os.getenv("SYNTHESIS_AGENT_MODEL") or None
 PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v8")
 
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "8000"))
+
+# --- Supabase: persistent storage for generated reports ---------------------
+# Optional. When unset, services/storage_service.py no-ops and the app keeps
+# behaving exactly like the local-only prototype (files only in outputs/,
+# history only in the browser's localStorage). Set these to make every
+# generated report durable across restarts/redeploys (Render's disk is
+# ephemeral) and visible to every user of the deployed UI, not just the
+# browser that generated it. Use the Supabase project's SERVICE ROLE key
+# here, never the anon key — this is server-side only, the frontend never
+# talks to Supabase directly.
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "reports")
+
+# --- HTTP Basic Auth: gate for the deployed UI -------------------------------
+# Optional. When BASIC_AUTH_USER is unset, main.py's BasicAuthMiddleware
+# no-ops (local dev stays open). Set both when deploying somewhere reachable
+# by anyone other than you, e.g. Render.
+BASIC_AUTH_USER = os.getenv("BASIC_AUTH_USER")
+BASIC_AUTH_PASSWORD = os.getenv("BASIC_AUTH_PASSWORD")

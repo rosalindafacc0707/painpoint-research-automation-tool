@@ -55,10 +55,14 @@ ffd-painpoint-research/
 │   └── responses.py           # GenerateMdDocResponse
 ├── services/
 │   ├── multiagent_service.py  # orchestratore multi-agente: N agenti di ricerca in parallelo + 1 di sintesi
-│   └── docx_export.py         # converte il markdown del report in un .docx
+│   ├── docx_export.py         # converte il markdown del report in un .docx
+│   └── storage_service.py     # persistenza opzionale su Supabase (Storage + Postgres), vedi "Deploy" sotto
+├── supabase/
+│   └── schema.sql              # tabella `reports` da eseguire una tantum sul progetto Supabase
 ├── frontend/
 │   └── index.html             # UI statica (no build step) che consuma le API sopra
 ├── outputs/                    # report generati (non committati, vedi .gitignore)
+├── render.yaml                  # blueprint di deploy per Render (vedi "Deploy" sotto)
 ├── docs/
 │   └── project_context.md     # contesto e piano di sviluppo del progetto
 └── tests/                      # riservato a test futuri
@@ -285,6 +289,12 @@ Endpoint disponibili (prefisso `/painpoint-researcher`):
 - `POST /generate-pain-point-md-multiagent` — vedi dettagli sotto.
 - `GET /download/{filename}` — restituisce il file richiesto (`.md` o
   `.docx`) con il `Content-Type` corretto, come allegato scaricabile.
+  Legge dal disco locale (`outputs/`): usato per la preview immediata
+  dopo la generazione e dallo script CLI.
+- `GET /reports`, `GET /reports/{id}/content`, `GET
+  /reports/{id}/download` — indice persistente dei report (Supabase),
+  usato dalla history condivisa della UI quando configurato; vedi "Deploy:
+  prodotto condiviso per il team" più sotto.
 
 Il frontend fa un form di intake (stessi campi di
 `inputs/sample_company_input.md`, più i selettori provider/modello per
@@ -427,6 +437,79 @@ di sopravvivere al carico di 8 agenti paralleli che aveva fatto rimuovere
 stretto tra quelli qui. Verifica sempre le condizioni di registrazione e i
 limiti dei piani gratuiti prima di un uso oltre il prototipo: cambiano
 senza preavviso.
+
+## Deploy: prodotto condiviso per il team (Render + Supabase + Basic Auth)
+
+Oltre all'uso locale (Ollama, disco locale, history solo nel browser)
+descritto sopra, il progetto può girare come piccolo prodotto interno
+raggiungibile da un URL, gratis, senza subscription. Tre pezzi, tutti
+opzionali e a costo zero:
+
+- **Hosting**: [Render](https://render.com) piano free (no carta di
+  credito, HTTPS automatico). Limite noto: l'istanza va in sleep dopo
+  ~15 minuti di inattività — il primo utilizzo dopo una pausa richiede
+  30-60s di cold start. Un'istanza free ha inoltre solo 512MB di RAM: 8
+  agenti di ricerca in parallelo (ognuno con un sottoprocesso MCP) sono
+  più a rischio di rallentamenti/OOM che sul tuo Mac — se succede, prima
+  cosa da provare è ridurre il carico (meno agenti/topic), non passare a
+  un piano a pagamento.
+- **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
+  locale — su Render usa `groq` per entrambi i ruoli (già gestito da
+  `providers/groq_provider.py` per il carico di 8 agenti paralleli, vedi
+  sopra).
+- **Storage persistente + tracking dei report**: [Supabase](https://supabase.com)
+  progetto free (Postgres per l'indice dei report + Storage per i file).
+  Necessario perché il disco di Render è effimero (si azzera a ogni
+  restart/redeploy) — senza questo, i report generati sparirebbero e la
+  history resterebbe solo nel browser di chi li ha generati.
+- **Accesso**: HTTP Basic Auth (una sola coppia utente/password, in
+  variabili d'ambiente) protegge sia la UI sia le API — senza, chiunque
+  abbia l'URL può usare il tool.
+
+### Setup Supabase (una tantum)
+
+1. Crea un account e un progetto gratuito su supabase.com.
+2. SQL Editor → incolla ed esegui `supabase/schema.sql` (crea la tabella
+   `reports`).
+3. Storage → New bucket → nome `reports` (deve combaciare con
+   `SUPABASE_BUCKET`), **Public bucket disattivato** — tutti i download
+   passano da signed URL temporanee generate dal backend
+   (`services/storage_service.py`), mai da URL pubbliche permanenti.
+4. Project Settings → API → copia `Project URL` (→ `SUPABASE_URL`) e la
+   **`service_role` key** (→ `SUPABASE_SERVICE_ROLE_KEY`; **non** la
+   `anon` key — la service role serve solo lato backend e non va mai
+   esposta al frontend).
+
+### Setup Render (una tantum)
+
+1. Crea un account gratuito su render.com e collega il repository GitHub.
+2. New → Blueprint → seleziona questo repo: Render legge `render.yaml` e
+   configura automaticamente il servizio (piano free, build/start command,
+   health check su `/health`).
+3. Nella dashboard del servizio, inserisci a mano i valori dei secret
+   marcati `sync: false` in `render.yaml`: `GROQ_API_KEY`, `SUPABASE_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD`
+   (e opzionalmente `TAVILY_API_KEY`).
+4. Deploy. L'URL assegnato da Render è quello da condividere con il capo
+   — comunica utente/password Basic Auth separatamente (non via email in
+   chiaro).
+
+### Endpoint aggiuntivi esposti da questo deploy
+
+- `GET /painpoint-researcher/reports` — indice di tutti i report generati
+  (vuoto se Supabase non è configurato), usato dalla sidebar "History"
+  del frontend per mostrare i report di chiunque, non solo quelli del
+  browser corrente.
+- `GET /painpoint-researcher/reports/{id}/content` — testo markdown di un
+  report passato (per il preview in pagina).
+- `GET /painpoint-researcher/reports/{id}/download?kind=md|docx` —
+  redirect a una signed URL Supabase (download diretto dal bucket, mai
+  proxato attraverso Render).
+- `GET /health` — liveness check per Render, non richiede Basic Auth.
+
+Nessuna di queste variabili è obbligatoria per l'uso locale descritto nel
+resto di questo README: se non impostate, l'app si comporta esattamente
+come prima (nessuna regressione).
 
 ## Origine dei requisiti
 
