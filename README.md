@@ -201,6 +201,20 @@ disponibile impostando `GROQ_MODEL` esplicitamente, ma va bene solo per il
 ruolo di sintesi (`enable_tools=False`, nessuna tool call), non per la
 ricerca, che ha bisogno che ogni tool call vada a buon fine.
 
+**Tentativo di velocizzare la ricerca con `gpt-oss-20b` (scartato,
+2026-08-17).** Su Groq `openai/gpt-oss-20b` ha gli stessi identici limiti
+free-tier di `gpt-oss-120b` (30 richieste/min, 8.000 token/min) e genera a
+circa il doppio della velocità grezza (~1200 tok/s contro ~500 tok/s
+sull'hardware Groq) — sembrava un cambio a rischio zero per il ruolo di
+ricerca (8 chiamate parallele, dove il tempo totale conta di più). Un test
+dal vivo su questo account ha però mostrato che gli serve **più** iterazioni
+di ricerca (più `web_search`/`fetch_url`) del 120B sullo stesso topic,
+saturando ripetutamente il budget TPM (più compattazioni del contesto) e
+terminando **troncato** (`stop_reason: length`) — una vera perdita di
+qualità, non solo lentezza in più. Scartato: entrambi i ruoli restano su
+`gpt-oss-120b` (default di `GROQ_MODEL`) finché non si trova un'alternativa
+più veloce che non tronchi.
+
 È il provider più rapido tra quelli qui, ma ha il budget free-tier più
 stretto: circa 30 richieste/minuto e 8.000 token/minuto per questo modello.
 `providers/groq_provider.py` gestisce questi limiti così:
@@ -457,6 +471,14 @@ opzionali e a costo zero:
   (i 8 topic girano a ondate invece che tutti insieme — più lento, molta
   meno RAM di picco). Se noti ancora OOM nei log di Render, abbassala
   ulteriormente (es. `2`) prima di considerare un piano a pagamento.
+  `services/multiagent_service.py` riduce già il costo di questa scelta:
+  invece di aprire un sottoprocesso MCP nuovo per ciascuno degli 8 topic,
+  `RESEARCH_AGENT_CONCURRENCY` worker persistenti pescano i topic da una
+  coda condivisa e riusano lo stesso sottoprocesso in sequenza — il costo
+  di avvio/import si paga 3 volte (con il default di `render.yaml`)
+  invece di 8, a parità di memoria di picco (verificato dal vivo: la
+  doppia inizializzazione della stessa sessione MCP è innocua, costa solo
+  un giro di richiesta/risposta in più, non un riavvio del processo).
 - **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
   locale — su Render usa `groq` per entrambi i ruoli (già gestito da
   `providers/groq_provider.py` per il carico di 8 agenti paralleli, vedi

@@ -19,6 +19,13 @@ services:
         value: groq
       - key: GROQ_API_KEY
         sync: false
+      # openai/gpt-oss-20b was tried here for the research role (same free-
+      # tier limits as 120b, ~2x raw token speed) but a live test needed
+      # more search/fetch iterations than 120b, ran the TPM-budget
+      # compaction repeatedly, and finished truncated (stop_reason=length)
+      # — a real quality regression, not just slower. Reverted; both roles
+      # stay on gpt-oss-120b (GROQ_MODEL's default) until a faster model is
+      # found that doesn't truncate.
       # 512MB RAM on this plan: 8 concurrent MCP subprocesses can get
       # SIGKILL'd (exit 137). 3 keeps peak memory well under the limit at
       # the cost of the research phase taking longer (topics run in waves

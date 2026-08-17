@@ -1,16 +1,21 @@
 """Business logic behind the /generate-pain-point-md-multiagent endpoint.
 
-Splits the research phase into N parallel per-topic research agents, each
-running its own MCP scraper subprocess and bounded to a single topic's
-search+fetch loop (see prompts/multiagent_research_prompt.md). Their
-findings are then handed — as plain evidence, with no further tool access
-— to a single synthesis agent (prompts/multiagent_synthesis_prompt.md) that
-merges, deduplicates, and writes the final deliverable.
+Splits the research phase into 8 per-topic research agents — one per entry
+in RESEARCH_TOPICS — each bounded to a single topic's search+fetch loop
+(see prompts/multiagent_research_prompt.md). RESEARCH_AGENT_CONCURRENCY
+persistent worker "slots" (_topic_worker) pull topics off a shared queue,
+each slot reusing one MCP scraper subprocess for every topic it processes
+instead of spawning a fresh one per topic — the subprocess-spawn/import
+cost is paid a few times per report instead of 8, without changing how
+many topics run at once. Findings are then handed — as plain evidence,
+with no further tool access — to a single synthesis agent
+(prompts/multiagent_synthesis_prompt.md) that merges, deduplicates, and
+writes the final deliverable.
 
-It trades a fixed per-request overhead (N+1 model calls and N MCP
-subprocesses) for bounded per-agent context and real topic-level
-parallelism, and lets the research and synthesis roles each use a
-different, independently configured provider/model.
+It trades a fixed per-request overhead (up to 9 model calls and
+RESEARCH_AGENT_CONCURRENCY MCP subprocesses) for bounded per-agent context
+and real topic-level parallelism, and lets the research and synthesis
+roles each use a different, independently configured provider/model.
 """
 
 import asyncio
@@ -80,33 +85,49 @@ RESEARCH_TOPICS = [
 RESEARCH_PROMPT_TEMPLATE = (ROOT / "prompts" / "multiagent_research_prompt.md").read_text(encoding="utf-8")
 SYNTHESIS_PROMPT = (ROOT / "prompts" / "multiagent_synthesis_prompt.md").read_text(encoding="utf-8")
 
-# Caps how many of the 8 per-topic MCP subprocesses are alive at once — see
-# config.RESEARCH_AGENT_CONCURRENCY for why this exists (Render free tier
-# OOM under full 8-way parallelism).
-_topic_semaphore = asyncio.Semaphore(RESEARCH_AGENT_CONCURRENCY)
 
-
-async def _run_topic_agent(topic: str, provider: str, model: str | None, company_input: str) -> str:
-    """Research exactly one topic in its own MCP subprocess; return its findings."""
+async def _topic_worker(
+    provider: str,
+    model: str | None,
+    company_input: str,
+    topic_queue: "asyncio.Queue[str]",
+    results: dict[str, str],
+) -> None:
+    """Pull topics off the shared queue and research them one at a time,
+    reusing ONE MCP subprocess/session for every topic this worker gets —
+    only RESEARCH_AGENT_CONCURRENCY of these run at once (see config.py),
+    so on a memory-capped host (Render's free 512MB instance) this pays the
+    subprocess spawn/import cost a few times per report instead of once per
+    topic (8), without lowering how many topics can be in flight at once.
+    Re-running a provider's session.initialize()/list_tools() for every
+    topic on the same session is redundant but harmless (verified live: a
+    second initialize() on an already-initialized session just re-runs the
+    handshake) — far cheaper than a fresh subprocess.
+    """
     run_agent = resolve_run_agent(provider)
-    system_prompt = RESEARCH_PROMPT_TEMPLATE.format(topic=topic)
     server_params = StdioServerParameters(command=sys.executable, args=[str(SCRAPER_SERVER)])
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            while True:
+                try:
+                    topic = topic_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
 
-    print(f"  ▷ research agent starting: {topic!r} via {provider}", file=sys.stderr)
-    try:
-        async with _topic_semaphore, stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                result = await run_agent(session, system_prompt, company_input, model=model)
-    except Exception as exc:  # noqa: BLE001 - one topic's failure (rate limit, transient
-        # network error, etc.) must not sink the other 7 parallel agents; the
-        # synthesis agent is already instructed to treat thin/no evidence for
-        # a topic as a valid, expected outcome, so a failure just becomes an
-        # extreme case of that.
-        print(f"  ✗ research agent failed: {topic!r}: {exc}", file=sys.stderr)
-        return f"## {topic}\n\nResearch agent failed and produced no findings ({exc}).\n"
-    print(f"  ✓ research agent done: {topic!r}", file=sys.stderr)
-
-    return result.text or f"## {topic}\n\nNo findings produced by the research agent.\n"
+                system_prompt = RESEARCH_PROMPT_TEMPLATE.format(topic=topic)
+                print(f"  ▷ research agent starting: {topic!r} via {provider}", file=sys.stderr)
+                try:
+                    result = await run_agent(session, system_prompt, company_input, model=model)
+                except Exception as exc:  # noqa: BLE001 - one topic's failure (rate limit,
+                    # transient network error, etc.) must not sink the other topics; the
+                    # synthesis agent is already instructed to treat thin/no evidence for a
+                    # topic as a valid, expected outcome, so a failure just becomes an
+                    # extreme case of that.
+                    print(f"  ✗ research agent failed: {topic!r}: {exc}", file=sys.stderr)
+                    results[topic] = f"## {topic}\n\nResearch agent failed and produced no findings ({exc}).\n"
+                    continue
+                print(f"  ✓ research agent done: {topic!r}", file=sys.stderr)
+                results[topic] = result.text or f"## {topic}\n\nNo findings produced by the research agent.\n"
 
 
 async def _run_synthesis_agent(
@@ -136,12 +157,18 @@ async def generate_pain_point_report_multiagent(request: GenerateMdDocRequestMul
 
     company_input = build_company_input(request)
 
-    topic_findings = await asyncio.gather(
+    topic_queue: "asyncio.Queue[str]" = asyncio.Queue()
+    for topic in RESEARCH_TOPICS:
+        topic_queue.put_nowait(topic)
+    topic_results: dict[str, str] = {}
+    worker_count = min(RESEARCH_AGENT_CONCURRENCY, len(RESEARCH_TOPICS))
+    await asyncio.gather(
         *(
-            _run_topic_agent(topic, research_provider, research_model, company_input)
-            for topic in RESEARCH_TOPICS
+            _topic_worker(research_provider, research_model, company_input, topic_queue, topic_results)
+            for _ in range(worker_count)
         )
     )
+    topic_findings = [topic_results[topic] for topic in RESEARCH_TOPICS]
 
     run_metadata = (
         "\n\n## Run metadata (report this exactly in the report header)\n"
