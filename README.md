@@ -449,10 +449,14 @@ opzionali e a costo zero:
   credito, HTTPS automatico). Limite noto: l'istanza va in sleep dopo
   ~15 minuti di inattività — il primo utilizzo dopo una pausa richiede
   30-60s di cold start. Un'istanza free ha inoltre solo 512MB di RAM: 8
-  agenti di ricerca in parallelo (ognuno con un sottoprocesso MCP) sono
-  più a rischio di rallentamenti/OOM che sul tuo Mac — se succede, prima
-  cosa da provare è ridurre il carico (meno agenti/topic), non passare a
-  un piano a pagamento.
+  agenti di ricerca in parallelo (ognuno con un proprio sottoprocesso MCP)
+  possono superare il limite e venire terminati dal sistema operativo
+  (exit code 137 nei log, SIGKILL) a metà richiesta — la UI mostra un 502.
+  `RESEARCH_AGENT_CONCURRENCY` (`config.py`) limita quanti agenti girano
+  **contemporaneamente**: `render.yaml` la imposta a `3` per questo piano
+  (i 8 topic girano a ondate invece che tutti insieme — più lento, molta
+  meno RAM di picco). Se noti ancora OOM nei log di Render, abbassala
+  ulteriormente (es. `2`) prima di considerare un piano a pagamento.
 - **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
   locale — su Render usa `groq` per entrambi i ruoli (già gestito da
   `providers/groq_provider.py` per il carico di 8 agenti paralleli, vedi

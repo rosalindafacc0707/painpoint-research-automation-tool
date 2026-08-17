@@ -19,6 +19,12 @@ services:
         value: groq
       - key: GROQ_API_KEY
         sync: false
+      # 512MB RAM on this plan: 8 concurrent MCP subprocesses can get
+      # SIGKILL'd (exit 137). 3 keeps peak memory well under the limit at
+      # the cost of the research phase taking longer (topics run in waves
+      # of 3 instead of all 8 at once). Raise only if you upgrade the plan.
+      - key: RESEARCH_AGENT_CONCURRENCY
+        value: "3"
       # Storage persistente per i report generati (Postgres + Storage bucket).
       # Vedi supabase/schema.sql per la tabella e il README per il bucket.
       - key: SUPABASE_URL

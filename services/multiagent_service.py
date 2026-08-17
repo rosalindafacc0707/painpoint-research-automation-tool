@@ -24,6 +24,7 @@ from mcp.client.stdio import stdio_client
 
 from config import (
     PROMPT_VERSION,
+    RESEARCH_AGENT_CONCURRENCY,
     RESEARCH_AGENT_MODEL,
     RESEARCH_AGENT_PROVIDER,
     SYNTHESIS_AGENT_MODEL,
@@ -79,6 +80,11 @@ RESEARCH_TOPICS = [
 RESEARCH_PROMPT_TEMPLATE = (ROOT / "prompts" / "multiagent_research_prompt.md").read_text(encoding="utf-8")
 SYNTHESIS_PROMPT = (ROOT / "prompts" / "multiagent_synthesis_prompt.md").read_text(encoding="utf-8")
 
+# Caps how many of the 8 per-topic MCP subprocesses are alive at once — see
+# config.RESEARCH_AGENT_CONCURRENCY for why this exists (Render free tier
+# OOM under full 8-way parallelism).
+_topic_semaphore = asyncio.Semaphore(RESEARCH_AGENT_CONCURRENCY)
+
 
 async def _run_topic_agent(topic: str, provider: str, model: str | None, company_input: str) -> str:
     """Research exactly one topic in its own MCP subprocess; return its findings."""
@@ -88,7 +94,7 @@ async def _run_topic_agent(topic: str, provider: str, model: str | None, company
 
     print(f"  ▷ research agent starting: {topic!r} via {provider}", file=sys.stderr)
     try:
-        async with stdio_client(server_params) as (read, write):
+        async with _topic_semaphore, stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 result = await run_agent(session, system_prompt, company_input, model=model)
     except Exception as exc:  # noqa: BLE001 - one topic's failure (rate limit, transient

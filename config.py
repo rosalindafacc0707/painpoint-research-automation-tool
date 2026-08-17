@@ -138,6 +138,14 @@ RESEARCH_AGENT_MODEL = os.getenv("RESEARCH_AGENT_MODEL") or None
 SYNTHESIS_AGENT_PROVIDER = os.getenv("SYNTHESIS_AGENT_PROVIDER", "ollama")
 SYNTHESIS_AGENT_MODEL = os.getenv("SYNTHESIS_AGENT_MODEL") or None
 
+# How many of the 8 research agents may run at once, each with its own MCP
+# subprocess. Default (8) = all at once, today's behaviour — fine on a
+# machine with real RAM (local Ollama use). On a memory-capped host (e.g.
+# Render's free 512MB instance) 8 concurrent subprocesses can exceed the
+# limit and get SIGKILL'd (exit code 137) mid-request; lower this via env
+# var there instead of upgrading to a paid instance.
+RESEARCH_AGENT_CONCURRENCY = int(os.getenv("RESEARCH_AGENT_CONCURRENCY", "8"))
+
 # Increment version at every deep change of either multi-agent prompt (see
 # prompts/multiagent_research_prompt.md and prompts/multiagent_synthesis_prompt.md)
 # and log the change in prompts/CHANGELOG.md.
