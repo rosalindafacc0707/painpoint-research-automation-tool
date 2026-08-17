@@ -19,6 +19,18 @@ from providers.base import RunResult
 
 MAX_ITERATIONS = 40
 
+# The shared system prompt (prompts/system_prompt_v6.md) tells the model to
+# call a discovery tool named "web_search" — matching Claude's built-in tool
+# name, since that's the provider the prompt was originally written for.
+# Ollama has no built-in web search: discovery is served locally by the MCP
+# tool `web_search_ddg` (mcp_server/scraper_server.py). Present it to the
+# model under the name the prompt actually uses, and map back to the real
+# MCP tool name when dispatching the call — without this, the model calls
+# "web_search" (as instructed) but that name isn't in its tool list, so the
+# MCP session logs "Tool 'web_search' not listed" and the call never reaches
+# the actual search tool.
+_PROMPT_NAME_TO_MCP_NAME = {"web_search": "web_search_ddg"}
+
 
 def _mcp_tools_to_ollama(mcp_tools) -> list[dict]:
     """Convert MCP tool descriptors into Ollama's native tool schema."""
@@ -26,7 +38,7 @@ def _mcp_tools_to_ollama(mcp_tools) -> list[dict]:
         {
             "type": "function",
             "function": {
-                "name": tool.name,
+                "name": "web_search" if tool.name == "web_search_ddg" else tool.name,
                 "description": tool.description or "",
                 "parameters": tool.inputSchema,
             },
@@ -100,7 +112,8 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
                         raise ValueError("Ollama returned a tool call without a function name.")
                     args = _tool_arguments(function.get("arguments", {}))
                     print(f"  → tool: {name}({args})", file=sys.stderr)
-                    result = await session.call_tool(name, args)
+                    mcp_name = _PROMPT_NAME_TO_MCP_NAME.get(name, name)
+                    result = await session.call_tool(mcp_name, args)
                     return {
                         "role": "tool",
                         "tool_name": name,

@@ -12,12 +12,21 @@ from providers.base import RunResult
 
 MAX_ITERATIONS = 40
 
+# The shared system prompt (prompts/system_prompt_v6.md) tells the model to
+# call a discovery tool named "web_search" — matching Claude's built-in tool
+# name, since that's the provider the prompt was originally written for.
+# Gemini has no built-in web search here: discovery is served locally by the
+# MCP tool `web_search_ddg` (mcp_server/scraper_server.py). Present it under
+# the name the prompt actually uses, and map back to the real MCP tool name
+# when dispatching the call.
+_PROMPT_NAME_TO_MCP_NAME = {"web_search": "web_search_ddg"}
+
 
 def _mcp_tools_to_gemini(mcp_tools) -> list[types.FunctionDeclaration]:
     """Convert MCP JSON schemas into Gemini function declarations."""
     return [
         types.FunctionDeclaration(
-            name=tool.name,
+            name="web_search" if tool.name == "web_search_ddg" else tool.name,
             description=tool.description or "",
             parameters=tool.inputSchema,
         )
@@ -91,7 +100,8 @@ async def run_agent(
         async def _run(call):
             args = dict(getattr(call, "args", None) or {})
             print(f"  → tool: {call.name}({args})", file=sys.stderr)
-            result = await session.call_tool(call.name, args)
+            mcp_name = _PROMPT_NAME_TO_MCP_NAME.get(call.name, call.name)
+            result = await session.call_tool(mcp_name, args)
             # FunctionResponse carries the call id.  We build the part
             # directly because ``Part.from_function_response`` does not
             # accept an id in every supported google-genai release.

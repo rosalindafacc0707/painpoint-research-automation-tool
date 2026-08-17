@@ -46,6 +46,15 @@ from providers.base import RunResult
 
 MAX_ITERATIONS = 40
 
+# The shared system prompt (prompts/system_prompt_v6.md) tells the model to
+# call a discovery tool named "web_search" — matching Claude's built-in tool
+# name, since that's the provider the prompt was originally written for.
+# Azure has no built-in web search: discovery is served locally by the MCP
+# tool `web_search_ddg` (mcp_server/scraper_server.py). Present it under the
+# name the prompt actually uses, and map back to the real MCP tool name when
+# dispatching the call.
+_PROMPT_NAME_TO_MCP_NAME = {"web_search": "web_search_ddg"}
+
 
 def _mcp_tools_to_responses(mcp_tools) -> list[dict]:
     """Convert MCP tool descriptors into Responses-API function tool definitions.
@@ -55,7 +64,7 @@ def _mcp_tools_to_responses(mcp_tools) -> list[dict]:
     return [
         {
             "type": "function",
-            "name": tool.name,
+            "name": "web_search" if tool.name == "web_search_ddg" else tool.name,
             "description": tool.description or "",
             "parameters": tool.inputSchema,
         }
@@ -127,7 +136,8 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
             async def _run(call):
                 args = json.loads(call.arguments or "{}")
                 print(f"  → tool: {call.name}({args})", file=sys.stderr)
-                result = await session.call_tool(call.name, args)
+                mcp_name = _PROMPT_NAME_TO_MCP_NAME.get(call.name, call.name)
+                result = await session.call_tool(mcp_name, args)
                 return call.call_id, _tool_result_text(result)
 
             # The model may request several independent tool calls in the
