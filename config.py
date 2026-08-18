@@ -64,14 +64,24 @@ GROQ_TPM_LIMIT = int(os.getenv("GROQ_TPM_LIMIT", "8000"))
 GROQ_TOOL_RESULT_MAX_CHARS = int(os.getenv("GROQ_TOOL_RESULT_MAX_CHARS", "1800"))
 
 # --- Mistral La Plateforme --------------------------------------------------
+# Two models, two phases (providers/mistral_provider.py) — La Plateforme's
+# per-model rate limits (checked live in the account console) vary by two
+# orders of magnitude: mistral-large-2512 allows only ~0.07 requests/second
+# (~1 every 14s) while ministral-8b-2512 allows ~3.13 req/s. This agent's
+# research loop fires several back-to-back completions (one per tool-call
+# turn, batched web_search/fetch_url calls in between) — fine for
+# ministral-8b's budget, but it exhausted large's almost immediately (HTTP
+# 429 even after 30s of retry/backoff). Splitting the work lets the cheap,
+# high-throughput model absorb the bursty research loop, while the
+# expensive, low-throughput model is only ever called once, at the end, to
+# turn the research draft into the final polished report.
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 MISTRAL_BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
-MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
-# Retry-with-backoff for HTTP 429 (rate limited) responses — observed live
-# under this agent's bursty tool-call pattern (several parallel searches per
-# turn, back-to-back completions). MISTRAL_RETRY_BASE_SECONDS doubles on each
-# attempt (2s, 4s, 8s, ...) unless Mistral's own Retry-After header says
-# otherwise.
+MISTRAL_RESEARCH_MODEL = os.getenv("MISTRAL_RESEARCH_MODEL", "ministral-8b-2512")
+MISTRAL_SYNTHESIS_MODEL = os.getenv("MISTRAL_SYNTHESIS_MODEL", "mistral-large-2512")
+# Retry-with-backoff for HTTP 429 (rate limited) responses — applies to both
+# phases. MISTRAL_RETRY_BASE_SECONDS doubles on each attempt (2s, 4s, 8s,
+# ...) unless Mistral's own Retry-After header says otherwise.
 MISTRAL_MAX_RETRIES = int(os.getenv("MISTRAL_MAX_RETRIES", "5"))
 MISTRAL_RETRY_BASE_SECONDS = float(os.getenv("MISTRAL_RETRY_BASE_SECONDS", "2"))
 

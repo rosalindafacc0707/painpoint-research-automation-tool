@@ -176,15 +176,30 @@ un upgrade del piano.
 
 ### Provider Mistral
 
-Usa `mistral` per chiamare l'API La Plateforme di Mistral. Il default
-`mistral-medium-latest` supporta il tool calling con buon compromesso tra
-qualità e rate limit — `mistral-large-latest` ha lo stesso comportamento ma
-è andato in rate limit (HTTP 429) sotto il carico reale di questo agente
-(ricerca su più topic con tool call ravvicinate). Aggiungi `MISTRAL_API_KEY`
-in `.env` (crea la chiave su console.mistral.ai), poi seleziona
-`--provider mistral`. Usa gli stessi due tool MCP locali del provider
-Azure/Gemini: `web_search_ddg` per scoprire fonti e `fetch_url` per
-leggerle. Il modello si configura con `MISTRAL_MODEL` in `.env.development`.
+Usa `mistral` per chiamare l'API La Plateforme di Mistral. I limiti di
+rate limit per modello di La Plateforme differiscono di due ordini di
+grandezza (verificato dal vivo in console): `mistral-large` regge solo
+~0.07 richieste/secondo (1 ogni 14s circa) mentre `ministral-8b` regge
+~3.13 richieste/secondo. Il loop di ricerca di questo agente (più chiamate
+consecutive, una per giro di tool call) satura Large quasi subito (HTTP
+429 anche dopo 30s di retry). Per questo il provider `mistral` divide il
+lavoro in due fasi con due modelli diversi (`providers/mistral_provider.py`):
+
+1. **Ricerca** (`MISTRAL_RESEARCH_MODEL`, default `ministral-8b-2512`) — il
+   loop con i tool (`web_search_ddg`, `fetch_url`) che produce una bozza.
+2. **Finalizzazione** (`MISTRAL_SYNTHESIS_MODEL`, default
+   `mistral-large-2512`) — un'unica chiamata senza tool che rilegge la
+   bozza contro le stesse regole del system prompt e scrive il report
+   finale. Una sola chiamata resta ampiamente dentro il rate limit stretto
+   di Large, indipendentemente da quanto è stata "a raffica" la fase 1.
+
+Aggiungi `MISTRAL_API_KEY` in `.env` (crea la chiave su console.mistral.ai),
+poi seleziona `--provider mistral`. Usa gli stessi due tool MCP locali del
+provider Azure/Gemini per la fase di ricerca: `web_search_ddg` per
+scoprire fonti e `fetch_url` per leggerle. I due modelli si configurano
+con `MISTRAL_RESEARCH_MODEL` / `MISTRAL_SYNTHESIS_MODEL` in
+`.env.development`; `MISTRAL_MAX_RETRIES` / `MISTRAL_RETRY_BASE_SECONDS`
+controllano il retry-con-backoff su un HTTP 429.
 
 Per usare Azure, dalla pagina della risorsa in Azure AI Foundry servono due
 valori (oltre alla API key):
@@ -283,9 +298,10 @@ pezzi, tutti opzionali e a costo zero:
   minuti di inattività — il primo utilizzo dopo una pausa richiede 30-60s
   di cold start.
 - **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
-  locale — `render.yaml` usa `mistral` (`mistral-medium-latest`), che non
-  richiede carta di credito e non ha un tetto giornaliero sui token stretto
-  come alcune alternative gratuite (vedi "Provider Mistral" più sopra).
+  locale — `render.yaml` usa `mistral` a due fasi/due modelli
+  (`ministral-8b-2512` per la ricerca, `mistral-large-2512` per la
+  finalizzazione), che non richiede carta di credito (vedi "Provider
+  Mistral" più sopra per il perché dello split).
 - **Storage persistente + tracking dei report**: [Supabase](https://supabase.com)
   progetto free (Postgres per l'indice dei report + Storage per i file).
   Necessario perché il disco di Render è effimero (si azzera a ogni
