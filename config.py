@@ -69,7 +69,7 @@ MISTRAL_BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
 MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
 
 # Increment version at every deep change of the system prompt and create a new file prompts/system_prompt_vN.md
-PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v6")
+PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v7")
 
 SYSTEM_PROMPT_PATH = f"prompts/system_prompt_{PROMPT_VERSION}.md"
 

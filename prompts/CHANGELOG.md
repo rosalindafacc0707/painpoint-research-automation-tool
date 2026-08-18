@@ -1,5 +1,45 @@
 # Prompt Changelog
 
+## v7 — 2026-08-18
+Diagnosticato su un report reale generato con provider Mistral
+(`outputs/nike_v6_mistral_20260818_114112.md`), il primo report generato con
+`mistral-large-latest` in produzione. Tre problemi concreti, non presenti
+(o meno evidenti) nei report generati con Claude:
+- **Preambolo prima del titolo**: la risposta iniziava con "Here is the
+  synthesized **Pain-Point Research Report** for **Nike**..." prima
+  dell'H1. Aggiunta regola esplicita in "Non-negotiable constraints": nessun
+  preambolo/meta-commento, la risposta deve iniziare direttamente con il
+  titolo H1.
+- **Full source list scollegata dalle citazioni**: la lista finale conteneva
+  11 fonti, ma 4 non comparivano mai come citazione inline in nessuna parte
+  del report — tra queste, un case study Jasper/EmeraldX **completamente
+  estraneo a Nike**, probabilmente letto durante la ricerca per ispirazione
+  sulla sezione Opportunity Recommendations e mai effettivamente collegato a
+  un'evidenza su Nike. Al contrario, molte affermazioni in Executive
+  Summary, Workflow map, Adobe relevance e Stakeholder hypotheses non
+  avevano alcuna citazione inline, pur non essendo esplicitamente marcate
+  come inferenza — un problema di "Evidence discipline" più ampio del solo
+  elenco fonti. Corretto estendendo esplicitamente l'obbligo di citazione
+  inline a TUTTE le sezioni del report (non solo la tabella pain point), e
+  riscrivendo la regola della Full source list come corrispondenza esatta
+  1:1 con le citazioni inline effettivamente usate nel testo (deduplicate
+  per URL, niente fonti lette-ma-mai-citate, niente citazioni orfane senza
+  voce nella lista finale). Aggiunto anche un "Pre-output self-check" in
+  Quality control che chiede al modello di verificare questa corrispondenza
+  prima di rispondere.
+- **Fonti di bassa qualità / ricerca poco approfondita**: tra le fonti usate
+  comparivano siti aggregatori generici (PitchGrade "SWOT Analysis and
+  Competitors", un blog generico "The Economics of Nike", pagine
+  glossario/blog generiche su strutture organizzative non specifiche di
+  Nike) invece di fonti primarie aziendali — sintomo di query di ricerca
+  poco mirate e di essersi fermati al primo risultato plausibile per topic.
+  Rafforzata "Source prioritisation" con esempi negativi concreti (content
+  mill di SWOT/business-model, blog "economics of X" generici, pagine
+  glossario HR/org-design non specifiche dell'azienda) e aggiunta una
+  regola esplicita di "Minimum research depth": almeno 2 query di ricerca
+  distinte e almeno 2 fetch_url delle fonti più promettenti per ciascuno
+  degli 8 topic, prima di passare al successivo.
+
 ## v6 — 2026-07-28
 - Runtime performance pass, no change to research scope or evidence
   standards: added a "Batch independent tool calls" rule to Tools available
