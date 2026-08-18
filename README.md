@@ -33,7 +33,8 @@ ffd-painpoint-research/
 │   ├── anthropic_provider.py  # Claude + web_search (server-side) + fetch_url
 │   ├── azure_provider.py      # Azure OpenAI / Azure AI Foundry + web_search_ddg + fetch_url
 │   ├── gemini_provider.py     # Google Gemini + web_search_ddg + fetch_url
-│   └── groq_provider.py       # GPT-OSS 120B via Groq — veloce, budget free-tier stretto
+│   ├── groq_provider.py       # GPT-OSS 120B via Groq — veloce, tetto di 200K token/giorno
+│   └── mistral_provider.py    # Mistral La Plateforme — provider consigliato per il deploy
 ├── mcp_server/
 │   └── scraper_server.py      # tool MCP: fetch_url (trafilatura), web_search_ddg (Tavily o ddgs)
 ├── prompts/
@@ -111,7 +112,7 @@ ffd-painpoint-research/
    propri sull'intero blocco tra parentesi quadre, senza mostrare l'URL)
    vengono convertiti in un vero documento Word, non solo un export testuale.
 
-## Switch di provider: Ollama, Gemini, Anthropic, Azure OpenAI o Groq
+## Switch di provider: Ollama, Mistral, Gemini, Anthropic, Azure OpenAI o Groq
 
 Ogni ruolo (ricerca / sintesi) sceglie il proprio provider indipendentemente,
 da `RESEARCH_AGENT_PROVIDER` / `SYNTHESIS_AGENT_PROVIDER` in
@@ -122,7 +123,10 @@ da `RESEARCH_AGENT_PROVIDER` / `SYNTHESIS_AGENT_PROVIDER` in
 # Ollama (default per entrambi i ruoli) — locale, gratuito, nessun rate limit esterno
 python scripts/run_prompt_test.py --company "Nome Azienda" --research-provider ollama --synthesis-provider ollama
 
-# Google Gemini — free tier, ma rate limit stretto con 8 agenti in parallelo
+# Mistral — free tier, il migliore testato dal vivo su questo progetto (vedi sotto)
+python scripts/run_prompt_test.py --company "Nome Azienda" --research-provider mistral
+
+# Google Gemini — free tier, ma rate limit più stretto di Mistral
 python scripts/run_prompt_test.py --company "Nome Azienda" --research-provider gemini
 
 # Anthropic — usa Claude + web_search server-side + fetch_url
@@ -169,7 +173,35 @@ mantieni quindi la revisione umana obbligatoria prima dell'uso commerciale.
 Contropartita del "nessun rate limit": più lento di un provider hosted,
 soprattutto con 8 agenti che si accodano sullo stesso modello locale.
 
-### Provider hosted consigliato per il deploy: Google Gemini (`gemini-3.5-flash`)
+### Provider hosted consigliato per il deploy: Mistral (`mistral-small-latest`)
+
+Per Mistral imposta `MISTRAL_API_KEY` in `.env` (piano gratuito "Experiment"
+su console.mistral.ai: nessuna carta, solo verifica telefono, ~1 miliardo
+di token/mese) e, opzionalmente, `MISTRAL_MODEL` in `.env.development`
+(default: `mistral-small-latest`). `providers/mistral_provider.py` usa il
+client `openai.AsyncOpenAI` puntato sull'endpoint Mistral (compatibile con
+le chat completions OpenAI, come già fatto per Azure/Groq) e gli stessi due
+tool MCP locali di Azure/Gemini/Groq: `web_search_ddg` per scoprire fonti,
+`fetch_url` per leggerle — esposti con i nomi reali (senza rimapparli a
+"web_search" come fa invece `groq_provider.py`), stesso approccio già
+verificato funzionante da Azure/Gemini.
+
+**Perché è risultato il migliore dei tre provider hosted testati dal vivo
+qui (2026-08-18)**: a differenza delle varianti "lite" di Gemini, rispetta
+correttamente la disciplina di lettura fonti del prompt di ricerca
+(chiama `web_search_ddg`, poi `fetch_url` su ogni fonte, prima di citarla);
+batcha in modo efficiente più ricerche/letture nello stesso turno,
+riducendo il numero totale di chiamate all'API per topic (un test reale
+ne ha usate solo 3 per l'intero ciclo ricerca+scrittura di un topic,
+contro le 10+ di Groq); e in un test di carico ha retto **30 chiamate
+concorrenti senza un solo errore 429** — molto oltre le 15 richieste/minuto
+di Gemini o le 30 di Groq (comunque limitate dal suo tetto di 200.000
+token/giorno). Le fonti online sui limiti reali del piano gratuito di
+Mistral si contraddicono (da 2 a ~60 richieste/minuto secondo la fonte) —
+questo test dal vivo suggerisce che il limite effettivo è ben più generoso
+di quanto pubblicizzato, ma tienilo d'occhio in caso di uso molto intenso.
+
+### Provider hosted alternativo: Google Gemini (`gemini-3.5-flash`)
 
 Per Gemini imposta `GEMINI_API_KEY` in `.env` (chiave gratuita, senza carta,
 da Google AI Studio) e, opzionalmente, `GEMINI_MODEL` in `.env.development`
@@ -509,14 +541,15 @@ opzionali e a costo zero:
   doppia inizializzazione della stessa sessione MCP è innocua, costa solo
   un giro di richiesta/risposta in più, non un riavvio del processo).
 - **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
-  locale — su Render usa `gemini` (`gemini-3.5-flash`) per entrambi i
-  ruoli. Groq (`gpt-oss-120b`) fu il primo scelto ma in uso reale ha
-  colpito il suo tetto di **200.000 token al giorno** (non al minuto) dopo
-  una sola giornata di test — un limite duro. Gemini non ha un tetto
-  giornaliero sui token (solo 1.500 richieste/giorno) ed è quindi molto
-  più adatto a un uso ripetuto durante la giornata; vedi "Provider hosted
-  consigliato per il deploy" più sopra per i dettagli e perché non la
-  variante `-lite`.
+  locale — su Render usa `mistral` (`mistral-small-latest`) per entrambi i
+  ruoli, il migliore dei tre provider hosted testati dal vivo su questo
+  progetto: Groq (`gpt-oss-120b`) fu il primo scelto ma ha colpito il suo
+  tetto di **200.000 token al giorno** dopo una sola giornata di test;
+  Gemini (`gemini-3.5-flash`) non ha quel tetto ma solo 15 richieste/minuto;
+  Mistral rispetta la disciplina di lettura fonti del prompt, fa poche
+  chiamate per topic e ha retto 30 chiamate concorrenti senza un solo 429
+  in un test di carico, senza alcun tetto giornaliero riscontrato — vedi
+  "Provider hosted: Mistral" più sopra per i dettagli.
 - **Storage persistente + tracking dei report**: [Supabase](https://supabase.com)
   progetto free (Postgres per l'indice dei report + Storage per i file).
   Necessario perché il disco di Render è effimero (si azzera a ogni

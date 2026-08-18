@@ -22,7 +22,7 @@ own.
 import importlib
 from dataclasses import dataclass
 
-from config import ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY
+from config import ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY
 
 
 @dataclass
@@ -39,6 +39,7 @@ PROVIDER_MODULES = {
     "gemini": "providers.gemini_provider",
     "ollama": "providers.ollama_provider",
     "groq": "providers.groq_provider",
+    "mistral": "providers.mistral_provider",
 }
 
 # Providers whose API key lives directly in config.py and is worth checking
@@ -49,6 +50,7 @@ _REQUIRED_KEYS = {
     "anthropic": ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
     "gemini": ("GEMINI_API_KEY", GEMINI_API_KEY),
     "groq": ("GROQ_API_KEY", GROQ_API_KEY),
+    "mistral": ("MISTRAL_API_KEY", MISTRAL_API_KEY),
 }
 
 

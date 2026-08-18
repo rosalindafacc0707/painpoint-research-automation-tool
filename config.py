@@ -121,6 +121,18 @@ GROQ_TOOL_RESULT_MAX_CHARS = int(os.getenv("GROQ_TOOL_RESULT_MAX_CHARS", "1800")
 # when GROQ_MODEL contains "gpt-oss" — Llama models don't support it.
 GROQ_REASONING_EFFORT = os.getenv("GROQ_REASONING_EFFORT", "low")
 
+# --- Mistral La Plateforme ---------------------------------------------------
+# Free "Experiment" tier: no credit card (phone verification only), ~1
+# billion tokens/month — but its per-minute request rate isn't clearly
+# published and sources disagree (as low as 2 RPM, as high as ~60);
+# verify live before relying on it under this project's 3-way concurrent
+# research load (see providers/mistral_provider.py). mistral-small-latest
+# is the default: fast, and Mistral's smaller models are generally the
+# ones recommended for tool-calling/agentic workloads.
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+MISTRAL_BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+
 # --- Tavily: web search built for AI agents ---------------------------------
 # Optional. If set, mcp_server/scraper_server.py's web_search_ddg tool calls
 # the Tavily Search API instead of scraping DuckDuckGo/metasearch backends

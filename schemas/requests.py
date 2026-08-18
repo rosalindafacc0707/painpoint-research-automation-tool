@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ProviderName = Literal["anthropic", "azure", "gemini", "ollama", "groq"]
+ProviderName = Literal["anthropic", "azure", "gemini", "ollama", "groq", "mistral"]
 
 
 class CompanyIntake(BaseModel):

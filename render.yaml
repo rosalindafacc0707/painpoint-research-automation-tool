@@ -11,23 +11,23 @@ services:
     healthCheckPath: /health
     envVars:
       # Ollama non è utilizzabile su questo piano (nessuna GPU/modello
-      # locale). Groq (gpt-oss-120b) fu il primo provider hosted usato qui
-      # ma in uso reale ha colpito il suo tetto di 200.000 TOKEN AL GIORNO
-      # (non al minuto) dopo poche run — un limite duro, non aggirabile
-      # con retry/backoff. Gemini (gemini-3.5-flash) non ha un tetto
-      # giornaliero sui token (solo 1.500 RICHIESTE/giorno, molto più
-      # capiente per uso ripetuto) e un budget di 250K token/minuto contro
-      # gli 8K di Groq — verificato dal vivo che rispetta la disciplina di
-      # lettura fonti del prompt di ricerca (a differenza di
-      # gemini-3.5-flash-lite, più veloce ma che cita dagli snippet di
-      # ricerca senza leggere le pagine). providers/groq_provider.py resta
-      # nel codice come alternativa se preferisci passare a un piano Groq
-      # a pagamento.
+      # locale). Provider hosted provati in ordine, tutti a costo zero:
+      # Groq (gpt-oss-120b) fu il primo, ma in uso reale ha colpito il suo
+      # tetto di 200.000 TOKEN AL GIORNO — un limite duro. Gemini
+      # (gemini-3.5-flash) non ha quel tetto ma solo 15 richieste/minuto.
+      # Mistral (mistral-small-latest) è risultato il migliore nei test dal
+      # vivo: rispetta la disciplina di lettura fonti del prompt (a
+      # differenza delle varianti "lite" di Gemini, che citano dagli
+      # snippet senza leggere le pagine), fa poche chiamate per topic
+      # (batch efficiente di ricerche/letture), e ha retto 30 chiamate
+      # concorrenti senza un solo 429 in un test di carico — nessun tetto
+      # giornaliero sui token riscontrato. providers/gemini_provider.py e
+      # providers/groq_provider.py restano nel codice come alternative.
       - key: RESEARCH_AGENT_PROVIDER
-        value: gemini
+        value: mistral
       - key: SYNTHESIS_AGENT_PROVIDER
-        value: gemini
-      - key: GEMINI_API_KEY
+        value: mistral
+      - key: MISTRAL_API_KEY
         sync: false
       # 512MB RAM on this plan: 8 concurrent MCP subprocesses can get
       # SIGKILL'd (exit 137). 3 keeps peak memory well under the limit at
