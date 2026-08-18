@@ -178,17 +178,21 @@ tier ad aprile 2026 e ora solo a pagamento). Gemini usa gli stessi due tool
 MCP locali del provider Azure: `web_search_ddg` per scoprire fonti e
 `fetch_url` per leggerle.
 
-**Perché `gemini-3.5-flash` e non `-lite`**: `gemini-3.5-flash-lite` ha un
-limite di richieste/minuto più alto (30 contro 15) ma un test dal vivo ha
-mostrato che risponde citando fonti **senza mai chiamare `fetch_url`** —
-usa solo gli snippet di `web_search`, violando la disciplina delle
-evidenze del prompt di ricerca (ogni fonte citata deve essere stata letta
-per intero). `gemini-3.5-flash` (non lite), testato sullo stesso topic,
-chiama correttamente `web_search` e poi `fetch_url` su ogni fonte prima di
-citarla, con un output più ricco e nessun troncamento. Free tier: 15
-richieste/minuto, 1.500 richieste/**giorno**, ~250.000 token/minuto — vedi
-sotto perché il conteggio a richieste/giorno (non a token) è preferibile a
-quello di Groq per un uso ripetuto nell'arco della giornata.
+**Perché `gemini-3.5-flash` e non una variante `-lite`**: sia
+`gemini-3.5-flash-lite` che `gemini-3.1-flash-lite` hanno un limite di
+richieste/minuto più alto (30 contro 15) ma testati dal vivo sullo stesso
+topic **nessuno dei due ha mai chiamato `fetch_url`** — rispondono citando
+fonti viste solo come snippet di `web_search`, violando la disciplina
+delle evidenze del prompt di ricerca (ogni fonte citata deve essere stata
+letta per intero). Non è un caso isolato di una versione: sembra un tratto
+della classe "lite" in generale. `gemini-3.5-flash` (non lite), testato
+sullo stesso topic, chiama correttamente `web_search` e poi `fetch_url` su
+ogni fonte prima di citarla, con un output più ricco e nessun
+troncamento — vale la pena il limite di richieste/minuto più basso. Free
+tier: 15 richieste/minuto, 1.500 richieste/**giorno**, ~250.000
+token/minuto — vedi sotto perché il conteggio a richieste/giorno (non a
+token) è preferibile a quello di Groq per un uso ripetuto nell'arco della
+giornata.
 
 ### Provider hosted alternativo: Groq + GPT-OSS 120B (limite giornaliero di token stretto)
 
