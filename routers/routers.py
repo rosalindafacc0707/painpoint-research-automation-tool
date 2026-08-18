@@ -61,9 +61,12 @@ async def download(filename: str):
 @router.get("/reports")
 async def list_reports():
     """Every report ever generated, from Supabase — shared across all users/
-    devices, unlike the browser-local history it replaces. Empty list when
-    Supabase isn't configured (local dev, no persistence set up)."""
-    return storage_service.list_reports()
+    devices, unlike the browser-local history it replaces. `reports` is
+    empty when Supabase isn't configured (local dev, no persistence set
+    up); `configured` tells the frontend whether that's "genuinely no
+    reports yet" or "no persistence at all, fall back to browser-local
+    history" — an empty list alone can't distinguish the two."""
+    return {"configured": storage_service.is_configured(), "reports": storage_service.list_reports()}
 
 
 def _get_report_or_404(report_id: str) -> dict:
