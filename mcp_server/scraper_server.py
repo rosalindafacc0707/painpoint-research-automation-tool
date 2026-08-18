@@ -10,13 +10,9 @@ Exposes two tools:
                         TAVILY_API_KEY is set; otherwise falls back to a
                         metasearch aggregator, no API key required.
 
-Which tools a given run actually uses depends on the provider (see
-providers/anthropic_provider.py and providers/azure_provider.py):
-  - Anthropic provider: uses Claude's own server-side `web_search` tool for
-    discovery, and only calls `fetch_url` here to read the full page.
-  - Azure provider (Azure OpenAI / Azure AI Foundry): has no built-in web
-    search, so it uses BOTH `web_search_ddg` (discovery) and `fetch_url`
-    (reading) from this server.
+Every current provider (Azure, Gemini, Ollama, Mistral — see providers/*.py)
+has no built-in web search, so each uses BOTH `web_search_ddg` (discovery)
+and `fetch_url` (reading) from this server.
 
 Both tools are `async def`, offloading their actual blocking work (network
 I/O, PDF/HTML parsing) onto a worker thread via `asyncio.to_thread`. FastMCP

@@ -16,8 +16,8 @@ services:
       # providers/mistral_provider.py): ministral-8b-2512 (alto throughput)
       # per il loop di ricerca con i tool, mistral-large-2512 (throughput
       # molto basso ma qualità migliore) per l'unica chiamata finale di
-      # finalizzazione. anthropic/azure/gemini/groq restano nel codice come
-      # alternative a provider mistral nel suo complesso.
+      # finalizzazione. azure/gemini restano nel codice come alternative a
+      # provider mistral nel suo complesso.
       - key: PROVIDER
         value: mistral
       - key: MISTRAL_API_KEY

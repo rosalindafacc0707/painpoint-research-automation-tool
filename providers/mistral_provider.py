@@ -4,8 +4,8 @@ Mistral's `/v1/chat/completions` endpoint follows the same request/response
 shape as OpenAI's Chat Completions API (including the "tools" /
 "tool_choice" function-calling schema), so this provider reuses the
 `openai.AsyncOpenAI` client with a custom `base_url`, the same approach used
-for Groq (providers/groq_provider.py) and Azure (providers/azure_provider.py)
-instead of installing the separate `mistralai` SDK.
+for Azure (providers/azure_provider.py) instead of installing the separate
+`mistralai` SDK.
 
 La Plateforme's per-model rate limits differ by two orders of magnitude
 (checked live in the account console): mistral-large-2512 allows only

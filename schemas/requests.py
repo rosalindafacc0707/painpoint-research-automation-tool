@@ -17,6 +17,6 @@ class GenerateMdDocRequest(BaseModel):
         default=None,
         description="Lente di ricerca specifica, se diversa dal default CVC / Marketing Operations.",
     )
-    provider: Literal["anthropic", "azure", "gemini", "gemma", "ollama", "groq", "mistral"] | None = Field(
+    provider: Literal["azure", "gemini", "ollama", "mistral"] | None = Field(
         default=None, description="Override del PROVIDER configurato in .env.development."
     )

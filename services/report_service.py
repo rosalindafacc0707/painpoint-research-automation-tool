@@ -17,9 +17,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from config import (
-    ANTHROPIC_API_KEY,
     GEMINI_API_KEY,
-    GEMMA_API_KEY,
     MISTRAL_API_KEY,
     PROMPT_VERSION,
     PROVIDER,
@@ -59,32 +57,20 @@ def _build_company_input(request: GenerateMdDocRequest) -> str:
 async def generate_pain_point_report(request: GenerateMdDocRequest) -> dict:
     provider = request.provider or PROVIDER
 
-    if provider == "anthropic":
-        if not ANTHROPIC_API_KEY:
-            raise RuntimeError("ANTHROPIC_API_KEY not set. Check the .env file.")
-        from providers.anthropic_provider import run_agent
-    elif provider == "azure":
+    if provider == "azure":
         from providers.azure_provider import run_agent
     elif provider == "gemini":
         if not GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY not set. Check the .env file.")
         from providers.gemini_provider import run_agent
-    elif provider == "gemma":
-        if not GEMMA_API_KEY:
-            raise RuntimeError("GEMMA_API_KEY or GEMINI_API_KEY not set. Check the .env file.")
-        from providers.gemma_provider import run_agent
     elif provider == "ollama":
         from providers.ollama_provider import run_agent
-    elif provider == "groq":
-        from providers.groq_provider import run_agent
     elif provider == "mistral":
         if not MISTRAL_API_KEY:
             raise RuntimeError("MISTRAL_API_KEY not set. Check the .env file.")
         from providers.mistral_provider import run_agent
     else:
-        raise ValueError(
-            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, groq, or mistral."
-        )
+        raise ValueError(f"Unknown provider: {provider!r}. Use azure, gemini, ollama, or mistral.")
 
     system_prompt = (ROOT / SYSTEM_PROMPT_PATH).read_text(encoding="utf-8")
     run_metadata = (

@@ -24,20 +24,15 @@ ffd-painpoint-research/
 ├── config.py                  # modello, provider attivo, versione prompt
 ├── providers/
 │   ├── base.py                # RunResult condiviso tra i provider
-│   ├── anthropic_provider.py  # Claude + web_search (server-side) + fetch_url
 │   ├── azure_provider.py      # Azure OpenAI / Azure AI Foundry + web_search_ddg + fetch_url
 │   ├── gemini_provider.py     # Google Gemini + web_search_ddg + fetch_url
-│   ├── gemma_provider.py      # Google-hosted Gemma + web_search_ddg + fetch_url
 │   ├── ollama_provider.py     # Modello open-weight locale + web_search_ddg + fetch_url
-│   ├── groq_provider.py       # GPT-OSS open-weight veloce + web_search_ddg + fetch_url
-│   └── mistral_provider.py    # Mistral La Plateforme + web_search_ddg + fetch_url
+│   └── mistral_provider.py    # Mistral La Plateforme, a due fasi/due modelli + web_search_ddg + fetch_url
 ├── mcp_server/
 │   └── scraper_server.py      # tool MCP: fetch_url, web_search_ddg
 ├── prompts/
-│   ├── system_prompt_v1.md    # versione iniziale (superata)
-│   ├── system_prompt_v2.md    # seconda versione (superata)
-│   ├── system_prompt_v3.md    # versione corrente da validare
-│   └── CHANGELOG.md           # storico delle versioni del prompt
+│   ├── system_prompt_v1.md ... system_prompt_v8.md  # versioni storiche, vedi CHANGELOG.md
+│   └── CHANGELOG.md           # storico delle versioni del prompt (PROMPT_VERSION attiva in .env.development)
 ├── inputs/
 │   ├── sample_company_input.md  # template di intake: solo nome azienda + campi opzionali
 │   └── moscow/
@@ -72,7 +67,8 @@ ffd-painpoint-research/
    ```
    pip install -r requirements.txt
    ```
-3. Copia `.env.example` in `.env` e inserisci la tua `ANTHROPIC_API_KEY`.
+3. Copia `.env.example` in `.env` e inserisci `MISTRAL_API_KEY` (provider di
+   default — vedi "Switch di provider" più sotto per le alternative).
 
 ## Uso
 
@@ -85,9 +81,9 @@ ffd-painpoint-research/
    ```
    python scripts/run_prompt_test.py inputs/il_tuo_file.md --company "Nome Azienda"
    ```
-3. Lo script usa il modello configurato in `config.py`
-   (default: `claude-sonnet-5`) con il web search tool abilitato, e il
-   system prompt in `prompts/system_prompt_v3.md`. Versione del prompt,
+3. Lo script usa il provider configurato in `config.py`/`.env.development`
+   (default: `mistral`) e il system prompt in
+   `prompts/system_prompt_{PROMPT_VERSION}.md`. Versione del prompt,
    "agent version" e data di run vengono iniettate automaticamente dallo
    script. L'output viene stampato a schermo e salvato in `outputs/` come
    `{azienda}_{versione_prompt}_{provider}_{timestamp}.md` **e** come
@@ -97,14 +93,14 @@ ffd-painpoint-research/
    propri sull'intero blocco tra parentesi quadre, senza mostrare l'URL)
    vengono convertiti in un vero documento Word, non solo un export testuale.
 
-## Switch di provider: Anthropic, Azure OpenAI, Gemini, Gemma, Ollama, Groq o Mistral
+## Switch di provider: Mistral, Azure OpenAI, Gemini o Ollama
 
-Lo script supporta sette provider, scelti da `PROVIDER` in `.env.development`
-oppure passando `--provider` da riga di comando:
+Lo script supporta quattro provider, scelti da `PROVIDER` in
+`.env.development` oppure passando `--provider` da riga di comando:
 
 ```
-# Anthropic (default) — usa Claude + web_search server-side + fetch_url
-python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider anthropic
+# Mistral La Plateforme (default) — vedi "Provider Mistral" più sotto
+python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider mistral
 
 # Azure OpenAI / Azure AI Foundry
 python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider azure
@@ -112,27 +108,14 @@ python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider azure
 # Google Gemini
 python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider gemini
 
-# Google-hosted Gemma
-python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider gemma
-
 # Modello open-weight locale via Ollama
 python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider ollama
-
-# Modello open-weight veloce via Groq
-python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider groq
-
-# Mistral La Plateforme
-python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider mistral
 ```
 
 Per Gemini imposta `GEMINI_API_KEY` in `.env` e, opzionalmente,
 `GEMINI_MODEL` in `.env.development` (default: `gemini-2.5-pro`). Gemini usa
 gli stessi due tool MCP locali del provider Azure: `web_search_ddg` per
 scoprire fonti e `fetch_url` per leggerle.
-
-Gemma è ospitato sulla stessa Gemini API e può riutilizzare `GEMINI_API_KEY`;
-imposta `GEMMA_API_KEY` solo se desideri una chiave distinta. Il modello si
-configura con `GEMMA_MODEL` (default: `gemma-4-26b-a4b-it`).
 
 ### Provider locale open-weight: Ollama + Qwen
 
@@ -154,25 +137,6 @@ e temperatura con le variabili `OLLAMA_*` nello stesso file. Il modello è
 locale ma il tool `web_search_ddg` continua a interrogare il web per reperire
 le fonti; mantieni quindi la revisione umana obbligatoria prima dell'uso
 commerciale.
-
-### Provider open-weight veloce: Groq + GPT-OSS 120B
-
-Per la qualità del report senza la lentezza dell'inferenza locale usa
-`groq`. Il default `openai/gpt-oss-120b` è un modello open-weight da 120B
-servito da Groq a circa 500 token/s, con 131k token di contesto e supporto ai
-tool. Aggiungi `GROQ_API_KEY` in `.env`, poi seleziona `--provider groq`.
-
-Non è un servizio illimitato: usa una API key e ha costi e rate limit. Per il
-piano Developer documentato, GPT-OSS 120B ha un limite di 250k token/minuto e
-1.000 richieste/minuto; per questo prototipo è molto più vicino a “quanto
-voglio” rispetto a un endpoint tradizionale, ma non sostituisce un piano
-commerciale per un carico continuo.
-
-Un account Groq on-demand può avere un limite iniziale molto più basso (ad
-esempio 8k token/minuto). Il provider limita automaticamente output e testo
-delle fonti per evitare richieste rifiutate; le variabili GROQ_MAX_COMPLETION_TOKENS,
-GROQ_TPM_LIMIT e GROQ_TOOL_RESULT_MAX_CHARS devono essere aumentate solo dopo
-un upgrade del piano.
 
 ### Provider Mistral
 
@@ -204,7 +168,7 @@ controllano il retry-con-backoff su un HTTP 429.
 Per usare Azure, dalla pagina della risorsa in Azure AI Foundry servono due
 valori (oltre alla API key):
 
-- `AZURE_OPENAI_API_KEY` → in `.env` (è un segreto, come `ANTHROPIC_API_KEY`)
+- `AZURE_OPENAI_API_KEY` → in `.env` (è un segreto, come `MISTRAL_API_KEY`)
 - `AZURE_OPENAI_ENDPOINT` → in `.env.development`, deve finire in
   **`/openai/v1`** (es. `https://<risorsa>.services.ai.azure.com/openai/v1`)
   — è la superficie OpenAI-compatibile "v1" della risorsa Foundry, confermata
@@ -214,26 +178,17 @@ valori (oltre alla API key):
   deployment come appare in Azure AI Foundry → Deployments (non
   necessariamente il nome del modello sottostante)
 
-Nota architetturale: Claude ha un tool di web search integrato lato server,
-Azure no. Per questo il path `azure` usa due tool MCP locali (`web_search_ddg`
-per scoprire le fonti + `fetch_url` per leggerle), mentre il path `anthropic`
-usa solo `fetch_url` (la scoperta la fa `web_search` di Claude). Entrambi i
-path condividono lo stesso `mcp_server/scraper_server.py` e lo stesso system
-prompt — quello che cambia è il modello, l'API sottostante (Anthropic
-Messages API vs Responses API) e come vengono esposti i tool.
+Nota architetturale: Azure OpenAI non ha un tool di web search integrato
+lato server, quindi il path `azure` usa due tool MCP locali (`web_search_ddg`
+per scoprire le fonti + `fetch_url` per leggerle) — condivide lo stesso
+`mcp_server/scraper_server.py` e lo stesso system prompt degli altri
+provider "senza search integrata" (Gemini, Ollama, Mistral).
 
 Scelta implementativa: il provider Azure usa il client `openai.OpenAI`
 semplice (non `AzureOpenAI`, non serve `api_version` su questa superficie) e
 la **Responses API** (`client.responses.create`), perché è quello che
 risulta effettivamente funzionante contro la risorsa Foundry — non la Chat
-Completions API usata invece per il path open-source/generico.
-
-**Se ricevi `Your credit balance is too low` con il provider Anthropic**: non
-è un bug, è il credito API esaurito sull'account collegato alla
-`ANTHROPIC_API_KEY` in uso. Vai sulla Anthropic Console
-(console.anthropic.com), sezione Plans & Billing, e ricarica il credito o
-aggiorna il piano. Nel frattempo puoi continuare a testare il prompt con
-`--provider azure`.
+Completions API usata invece dagli altri provider.
 
 ## API FastAPI e frontend
 

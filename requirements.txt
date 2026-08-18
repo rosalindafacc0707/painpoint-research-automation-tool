@@ -1,4 +1,3 @@
-anthropic>=0.40.0
 python-dotenv>=1.0.0
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
@@ -11,9 +10,10 @@ trafilatura>=1.12.0
 ddgs>=9.0.0
 pypdf>=5.0.0
 
-# Azure OpenAI / Azure AI Foundry provider switch (PROVIDER=azure in
-# .env.development) — talks to your Azure OpenAI deployment via the
-# AsyncAzureOpenAI client.
+# Used by providers/azure_provider.py (AsyncOpenAI client against the Azure
+# OpenAI / Azure AI Foundry endpoint) and providers/mistral_provider.py
+# (AsyncOpenAI client against Mistral's OpenAI-compatible chat completions
+# endpoint).
 openai>=1.50.0
 
 google-genai>=1.0.0

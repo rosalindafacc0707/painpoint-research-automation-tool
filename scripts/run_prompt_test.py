@@ -12,19 +12,14 @@ single real companies, one company each execution. The result always requires
 human review before every commercial use.
 
 Provider switch (PROVIDER in .env.development, or --provider on the CLI):
-  - "anthropic" (default) — Claude, with its server-side web_search tool for
-    discovery plus the local fetch_url MCP tool for reading pages.
   - "azure" — an Azure OpenAI / Azure AI Foundry deployment. Since Azure
     OpenAI has no built-in web search, this path uses TWO local MCP tools
     instead: web_search_ddg (discovery) and fetch_url (reading). See
     providers/azure_provider.py for required config and setup notes.
   - "gemini" — Google Gemini API, using the same local MCP research tools as
     Azure. See providers/gemini_provider.py for required configuration.
-  - "gemma" — Google-hosted Gemma, using the same local MCP research tools.
   - "ollama" — local open-weight model (default: qwen3.5:9b), using local
     Ollama and the same MCP research tools. No API key is required.
-  - "groq" — high-speed hosted open-weight GPT-OSS 120B with the same local
-    MCP research tools. Requires GROQ_API_KEY.
   - "mistral" — Mistral La Plateforme API, using the same local MCP research
     tools. Requires MISTRAL_API_KEY.
 
@@ -44,7 +39,7 @@ from mcp.client.stdio import stdio_client
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from config import ANTHROPIC_API_KEY, PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH  # noqa: E402
+from config import PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH  # noqa: E402
 from services.docx_export import markdown_to_docx  # noqa: E402
 
 SCRAPER_SERVER = ROOT / "mcp_server" / "scraper_server.py"
@@ -63,25 +58,17 @@ def slugify(text: str) -> str:
 async def main_async(args) -> None:
     provider = args.provider or PROVIDER
 
-    if provider == "anthropic":
-        if not ANTHROPIC_API_KEY:
-            sys.exit("ANTHROPIC_API_KEY not set. Check for it in the .env file")
-        from providers.anthropic_provider import run_agent
-    elif provider == "azure":
+    if provider == "azure":
         from providers.azure_provider import run_agent
     elif provider == "gemini":
         from providers.gemini_provider import run_agent
-    elif provider == "gemma":
-        from providers.gemma_provider import run_agent
     elif provider == "ollama":
         from providers.ollama_provider import run_agent
-    elif provider == "groq":
-        from providers.groq_provider import run_agent
     elif provider == "mistral":
         from providers.mistral_provider import run_agent
     else:
         sys.exit(
-            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, groq, or mistral."
+            f"Unknown provider: {provider!r}. Use azure, gemini, ollama, or mistral."
         )
 
     system_prompt = load_text(ROOT / SYSTEM_PROMPT_PATH)
@@ -154,7 +141,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["anthropic", "azure", "gemini", "gemma", "ollama", "groq", "mistral"],
+        choices=["azure", "gemini", "ollama", "mistral"],
         default=None,
         help="Override PROVIDER from .env.development for this run.",
     )

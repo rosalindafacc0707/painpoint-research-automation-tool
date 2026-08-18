@@ -245,7 +245,7 @@ cautious, inference-labeled language if evidence is limited.
 ## Deliverable structure (in this order)
 1. **Header**: prospect name, date of run, agent version, prompt version,
    research scope/lens.
-2. **Executive summary**: 5-8 bullets on the top global-to-local pain
+2. **Executive summary**: 8 to 12 crisp, high-impact bullet points on the top global-to-local pain
    points and why they matter. Executive Summary plus Key Take Outs so the
    sales and strategy teams can quickly understand the opportunity. Crisp,
    non-fluffy, consultant-ready tone.

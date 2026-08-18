@@ -213,18 +213,15 @@ h1,h2,h3{ font-family:var(--font-heading); font-weight:normal; }
             <div class="field"><label>Website</label><input class="input" id="in-website" type="text" placeholder="company.com"></div>
             <div class="field"><label>Country / region</label><input class="input" id="in-region" type="text" placeholder="e.g. EMEA"></div>
             <div class="field"><label>Department / business unit</label><input class="input" id="in-dept" type="text" placeholder="e.g. Global Marketing"></div>
-            <div class="field"><label>Industry</label><input class="input" id="in-industry" type="text" placeholder="e.g. Food delivery"></div>
+            <div class="field"><label>Industry</label><input class="input" id="in-industry" type="text" placeholder="e.g. Strategic Consulting"></div>
             <div class="field" style="grid-column:1/-1"><label>Specific research lens</label><input class="input" id="in-lens" type="text" placeholder="Default: Content Value Chain / Marketing Operations"></div>
             <div class="field" style="grid-column:1/-1">
               <label>Provider</label>
               <select class="input" id="in-provider">
-                <option value="">Server default (config.py PROVIDER)</option>
-                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="mistral">Mistral La Plateforme</option>
                 <option value="azure">Azure OpenAI</option>
                 <option value="gemini">Google Gemini</option>
-                <option value="gemma">Google Gemma</option>
                 <option value="ollama">Local Qwen (Ollama)</option>
-                <option value="groq">Groq (GPT-OSS 120B — fast)</option>
               </select>
             </div>
           </div>
