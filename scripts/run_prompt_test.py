@@ -25,6 +25,8 @@ Provider switch (PROVIDER in .env.development, or --provider on the CLI):
     Ollama and the same MCP research tools. No API key is required.
   - "groq" — high-speed hosted open-weight GPT-OSS 120B with the same local
     MCP research tools. Requires GROQ_API_KEY.
+  - "mistral" — Mistral La Plateforme API, using the same local MCP research
+    tools. Requires MISTRAL_API_KEY.
 
 In every case, the MCP server (mcp_server/scraper_server.py) is launched once as
 a stdio subprocess and its tools are handed to whichever provider is active.
@@ -75,9 +77,11 @@ async def main_async(args) -> None:
         from providers.ollama_provider import run_agent
     elif provider == "groq":
         from providers.groq_provider import run_agent
+    elif provider == "mistral":
+        from providers.mistral_provider import run_agent
     else:
         sys.exit(
-            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, or groq."
+            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, groq, or mistral."
         )
 
     system_prompt = load_text(ROOT / SYSTEM_PROMPT_PATH)
@@ -150,7 +154,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["anthropic", "azure", "gemini", "gemma", "ollama", "groq"],
+        choices=["anthropic", "azure", "gemini", "gemma", "ollama", "groq", "mistral"],
         default=None,
         help="Override PROVIDER from .env.development for this run.",
     )

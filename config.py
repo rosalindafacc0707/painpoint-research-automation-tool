@@ -13,6 +13,7 @@ load_dotenv(".env", override=True)
 # "gemma"     -> Google-hosted Gemma API
 # "ollama"    -> local open-weight model served by Ollama
 # "groq"      -> high-speed hosted open-weight model
+# "mistral"   -> Mistral La Plateforme API
 PROVIDER = os.getenv("PROVIDER", "anthropic")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -61,6 +62,11 @@ GROQ_REASONING_EFFORT = os.getenv("GROQ_REASONING_EFFORT", "medium")
 GROQ_MAX_COMPLETION_TOKENS = int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "3500"))
 GROQ_TPM_LIMIT = int(os.getenv("GROQ_TPM_LIMIT", "8000"))
 GROQ_TOOL_RESULT_MAX_CHARS = int(os.getenv("GROQ_TOOL_RESULT_MAX_CHARS", "1800"))
+
+# --- Mistral La Plateforme --------------------------------------------------
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+MISTRAL_BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
 
 # Increment version at every deep change of the system prompt and create a new file prompts/system_prompt_vN.md
 PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v6")

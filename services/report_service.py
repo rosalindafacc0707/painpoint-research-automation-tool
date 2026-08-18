@@ -15,7 +15,15 @@ import sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from config import ANTHROPIC_API_KEY, GEMINI_API_KEY, GEMMA_API_KEY, PROMPT_VERSION, PROVIDER, SYSTEM_PROMPT_PATH
+from config import (
+    ANTHROPIC_API_KEY,
+    GEMINI_API_KEY,
+    GEMMA_API_KEY,
+    MISTRAL_API_KEY,
+    PROMPT_VERSION,
+    PROVIDER,
+    SYSTEM_PROMPT_PATH,
+)
 from schemas.requests import GenerateMdDocRequest
 from services.docx_export import markdown_to_docx
 
@@ -67,9 +75,13 @@ async def generate_pain_point_report(request: GenerateMdDocRequest) -> dict:
         from providers.ollama_provider import run_agent
     elif provider == "groq":
         from providers.groq_provider import run_agent
+    elif provider == "mistral":
+        if not MISTRAL_API_KEY:
+            raise RuntimeError("MISTRAL_API_KEY not set. Check the .env file.")
+        from providers.mistral_provider import run_agent
     else:
         raise ValueError(
-            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, or groq."
+            f"Unknown provider: {provider!r}. Use anthropic, azure, gemini, gemma, ollama, groq, or mistral."
         )
 
     system_prompt = (ROOT / SYSTEM_PROMPT_PATH).read_text(encoding="utf-8")

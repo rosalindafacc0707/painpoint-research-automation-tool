@@ -29,7 +29,8 @@ ffd-painpoint-research/
 │   ├── gemini_provider.py     # Google Gemini + web_search_ddg + fetch_url
 │   ├── gemma_provider.py      # Google-hosted Gemma + web_search_ddg + fetch_url
 │   ├── ollama_provider.py     # Modello open-weight locale + web_search_ddg + fetch_url
-│   └── groq_provider.py       # GPT-OSS open-weight veloce + web_search_ddg + fetch_url
+│   ├── groq_provider.py       # GPT-OSS open-weight veloce + web_search_ddg + fetch_url
+│   └── mistral_provider.py    # Mistral La Plateforme + web_search_ddg + fetch_url
 ├── mcp_server/
 │   └── scraper_server.py      # tool MCP: fetch_url, web_search_ddg
 ├── prompts/
@@ -96,9 +97,9 @@ ffd-painpoint-research/
    propri sull'intero blocco tra parentesi quadre, senza mostrare l'URL)
    vengono convertiti in un vero documento Word, non solo un export testuale.
 
-## Switch di provider: Anthropic, Azure OpenAI, Gemini, Gemma, Ollama o Groq
+## Switch di provider: Anthropic, Azure OpenAI, Gemini, Gemma, Ollama, Groq o Mistral
 
-Lo script supporta sei provider, scelti da `PROVIDER` in `.env.development`
+Lo script supporta sette provider, scelti da `PROVIDER` in `.env.development`
 oppure passando `--provider` da riga di comando:
 
 ```
@@ -119,6 +120,9 @@ python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider ollama
 
 # Modello open-weight veloce via Groq
 python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider groq
+
+# Mistral La Plateforme
+python scripts/run_prompt_test.py inputs/il_tuo_file.md --provider mistral
 ```
 
 Per Gemini imposta `GEMINI_API_KEY` in `.env` e, opzionalmente,
@@ -169,6 +173,15 @@ esempio 8k token/minuto). Il provider limita automaticamente output e testo
 delle fonti per evitare richieste rifiutate; le variabili GROQ_MAX_COMPLETION_TOKENS,
 GROQ_TPM_LIMIT e GROQ_TOOL_RESULT_MAX_CHARS devono essere aumentate solo dopo
 un upgrade del piano.
+
+### Provider Mistral
+
+Usa `mistral` per chiamare l'API La Plateforme di Mistral. Il default
+`mistral-large-latest` è il modello flagship con supporto al tool calling.
+Aggiungi `MISTRAL_API_KEY` in `.env` (crea la chiave su console.mistral.ai),
+poi seleziona `--provider mistral`. Usa gli stessi due tool MCP locali del
+provider Azure/Gemini: `web_search_ddg` per scoprire fonti e `fetch_url` per
+leggerle. Il modello si configura con `MISTRAL_MODEL` in `.env.development`.
 
 Per usare Azure, dalla pagina della risorsa in Azure AI Foundry servono due
 valori (oltre alla API key):
