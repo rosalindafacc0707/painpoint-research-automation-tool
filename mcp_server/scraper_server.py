@@ -5,8 +5,10 @@ MCP server (stdio) — Research tools for the FFD Pain-Point Research Agent.
 Exposes two tools:
   - fetch_url        — reads the full text of a known URL (httpx + trafilatura
                         for HTML, pypdf for PDF documents).
-  - web_search_ddg    — discovers candidate source URLs via a metasearch
-                        aggregator, no API key required.
+  - web_search_ddg    — discovers candidate source URLs. Uses the Tavily
+                        Search API (built for AI agents, free tier) when
+                        TAVILY_API_KEY is set; otherwise falls back to a
+                        metasearch aggregator, no API key required.
 
 Which tools a given run actually uses depends on the provider (see
 providers/anthropic_provider.py and providers/azure_provider.py):
@@ -42,12 +44,21 @@ Normally it is launched as a subprocess by scripts/run_prompt_test.py.
 import asyncio
 import io
 import json
+import sys
+from pathlib import Path
 
 import httpx
 import trafilatura
 from ddgs import DDGS
 from mcp.server.fastmcp import FastMCP
 from pypdf import PdfReader
+
+# Launched as a bare `python mcp_server/scraper_server.py` subprocess (see
+# providers/*.py), so Python only puts this file's own directory on
+# sys.path[0] — the project root (and config.py in it) is not importable
+# without this.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import TAVILY_API_KEY  # noqa: E402
 
 # Cap the extracted text so a single page cannot blow up the token budget.
 # ~20k chars is plenty for a press release / careers page / case study.
@@ -65,8 +76,10 @@ REQUEST_TIMEOUT = 20.0
 # environment (self-signed-cert SSL error, HTTP 403, HTTP 502 respectively) —
 # excluding them cuts wasted round trips per search without losing coverage:
 # duckduckgo's own results come from the same underlying provider as yahoo,
-# which is kept.
-SEARCH_BACKENDS = "google,yandex,startpage,yahoo,wikipedia"
+# which is kept. google and yandex were removed as backend options by ddgs
+# itself in a later release (as of ddgs 9.14.4: "google, yandex - backends do
+# not exist or are disabled") — dropped from this list for the same reason.
+SEARCH_BACKENDS = "startpage,yahoo,wikipedia"
 
 # A realistic User-Agent avoids trivial bot blocks on many corporate sites.
 USER_AGENT = (
@@ -105,6 +118,31 @@ def _search_sync(query: str, max_results: int) -> list[dict]:
         return list(ddgs.text(query, max_results=max_results, backend=SEARCH_BACKENDS))
 
 
+TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+
+
+def _tavily_search_sync(query: str, max_results: int) -> list[dict]:
+    """Query the Tavily Search API — purpose-built for AI agents.
+
+    Returns already-cleaned, deduped results (title/url/snippet), which is
+    both faster and more reliable than scraping general-purpose metasearch
+    backends: no CAPTCHA/bot-detection failures, and no per-backend retry
+    loop. Normalizes to the same {title, href, body} shape _search_sync
+    returns so the caller doesn't need to know which backend served it.
+    """
+    response = _http_client.post(
+        TAVILY_SEARCH_URL,
+        json={"api_key": TAVILY_API_KEY, "query": query, "max_results": max_results},
+        headers={"Content-Type": "application/json"},
+    )
+    response.raise_for_status()
+    data = response.json()
+    return [
+        {"title": r.get("title", ""), "href": r.get("url", ""), "body": r.get("content", "")}
+        for r in data.get("results", [])
+    ]
+
+
 @mcp.tool()
 async def web_search_ddg(query: str, max_results: int = 8) -> str:
     """Search the web and return candidate result titles, URLs, and snippets.
@@ -122,10 +160,19 @@ async def web_search_ddg(query: str, max_results: int = 8) -> str:
     if cache_key in _search_cache:
         return _search_cache[cache_key]
 
-    try:
-        results = await asyncio.to_thread(_search_sync, query, max_results)
-    except Exception as exc:  # noqa: BLE001 - surface any backend error to the model
-        return f"ERROR: web search failed for query {query!r}: {exc}"
+    results: list[dict] = []
+    if TAVILY_API_KEY:
+        try:
+            results = await asyncio.to_thread(_tavily_search_sync, query, max_results)
+        except Exception as exc:  # noqa: BLE001 - fall back to ddgs rather than failing the run
+            print(f"  ⚠ Tavily search failed for {query!r}, falling back to ddgs: {exc}", file=sys.stderr)
+            results = []
+
+    if not results:
+        try:
+            results = await asyncio.to_thread(_search_sync, query, max_results)
+        except Exception as exc:  # noqa: BLE001 - surface any backend error to the model
+            return f"ERROR: web search failed for query {query!r}: {exc}"
 
     if not results:
         return f"No results found for query: {query!r}"

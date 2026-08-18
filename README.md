@@ -319,7 +319,7 @@ come prima (nessuna regressione).
 3. Nella dashboard del servizio, inserisci a mano i valori dei secret
    marcati `sync: false` in `render.yaml`: `MISTRAL_API_KEY`,
    `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BASIC_AUTH_USER`,
-   `BASIC_AUTH_PASSWORD`.
+   `BASIC_AUTH_PASSWORD` (e opzionalmente `TAVILY_API_KEY`).
 4. Deploy. L'URL assegnato da Render è quello da condividere con il capo
    — comunica utente/password Basic Auth separatamente (non via email in
    chiaro).
@@ -344,14 +344,3 @@ I requisiti derivano dal file MoSCoW fornito dal management
 Evidence & research, CVC analysis framework, Workflow mapping, Deliverable
 output, Commercial relevance, Quality control. Il contesto completo del
 progetto è in `docs/project_context.md`.
-
-## Fuori scope per ora
-
-Il piano di sviluppo complessivo prevede una Fase 2 (pipeline scriptata,
-output strutturato, export Word) e una Fase 3 (interfaccia interna
-semplice, testing con i colleghi sales). L'API FastAPI e il frontend
-descritti sopra sono un primo prototipo tecnico in questa direzione, ma
-restano strumenti di test interno: niente export Word, nessun testing
-strutturato con i colleghi sales, nessuna delle rimanenti "Should"
-requirement di Fase 3. Il repository non verrà esteso oltre questo finché
-il system prompt non sarà validato su aziende reali.

@@ -33,3 +33,7 @@ services:
         sync: false
       - key: BASIC_AUTH_PASSWORD
         sync: false
+      # Opzionale ma raccomandata: scoperta fonti via Tavily invece dello
+      # scraping di backend di metasearch generici (ddgs) — vedi .env.example.
+      - key: TAVILY_API_KEY
+        sync: false

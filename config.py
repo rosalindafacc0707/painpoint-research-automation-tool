@@ -75,6 +75,15 @@ SYSTEM_PROMPT_PATH = f"prompts/system_prompt_{PROMPT_VERSION}.md"
 
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "8000"))
 
+# --- Tavily: web search built for AI agents ---------------------------------
+# Optional. If set, mcp_server/scraper_server.py's web_search_ddg tool calls
+# the Tavily Search API instead of scraping DuckDuckGo/metasearch backends
+# via `ddgs` — Tavily is purpose-built for LLM agents (clean, already-deduped
+# results, no bot-detection flakiness) and has a free tier (1,000 searches/
+# month, no credit card). When unset, the tool falls back to the free,
+# no-key `ddgs` path so the project still runs with zero configuration.
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
 # --- Supabase: persistent storage for generated reports ---------------------
 # Optional. When unset, services/storage_service.py no-ops and the app keeps
 # behaving exactly like the local-only prototype (files only in outputs/,
