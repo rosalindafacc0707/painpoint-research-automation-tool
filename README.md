@@ -169,17 +169,28 @@ mantieni quindi la revisione umana obbligatoria prima dell'uso commerciale.
 Contropartita del "nessun rate limit": più lento di un provider hosted,
 soprattutto con 8 agenti che si accodano sullo stesso modello locale.
 
-### Provider hosted alternativo: Google Gemini
+### Provider hosted consigliato per il deploy: Google Gemini (`gemini-3.5-flash`)
 
-Per Gemini imposta `GEMINI_API_KEY` in `.env` e, opzionalmente,
-`GEMINI_MODEL` in `.env.development` (default: `gemini-2.5-pro`). Gemini usa
-gli stessi due tool MCP locali del provider Azure: `web_search_ddg` per
-scoprire fonti e `fetch_url` per leggerle. Free tier senza carta di credito,
-ma il limite di richieste/minuto può essere comunque stretto quando gli 8
-agenti di ricerca lo chiamano tutti insieme — se ci finisci contro, torna a
-`ollama`.
+Per Gemini imposta `GEMINI_API_KEY` in `.env` (chiave gratuita, senza carta,
+da Google AI Studio) e, opzionalmente, `GEMINI_MODEL` in `.env.development`
+(default: `gemini-3.5-flash` — **non** `gemini-2.5-pro`, rimosso dal free
+tier ad aprile 2026 e ora solo a pagamento). Gemini usa gli stessi due tool
+MCP locali del provider Azure: `web_search_ddg` per scoprire fonti e
+`fetch_url` per leggerle.
 
-### Provider hosted più veloce: Groq + GPT-OSS 120B (budget gratuito stretto)
+**Perché `gemini-3.5-flash` e non `-lite`**: `gemini-3.5-flash-lite` ha un
+limite di richieste/minuto più alto (30 contro 15) ma un test dal vivo ha
+mostrato che risponde citando fonti **senza mai chiamare `fetch_url`** —
+usa solo gli snippet di `web_search`, violando la disciplina delle
+evidenze del prompt di ricerca (ogni fonte citata deve essere stata letta
+per intero). `gemini-3.5-flash` (non lite), testato sullo stesso topic,
+chiama correttamente `web_search` e poi `fetch_url` su ogni fonte prima di
+citarla, con un output più ricco e nessun troncamento. Free tier: 15
+richieste/minuto, 1.500 richieste/**giorno**, ~250.000 token/minuto — vedi
+sotto perché il conteggio a richieste/giorno (non a token) è preferibile a
+quello di Groq per un uso ripetuto nell'arco della giornata.
+
+### Provider hosted alternativo: Groq + GPT-OSS 120B (limite giornaliero di token stretto)
 
 Per Groq imposta `GROQ_API_KEY` in `.env` (chiave gratuita su
 console.groq.com, nessuna carta richiesta) e, opzionalmente, `GROQ_MODEL` in
@@ -240,6 +251,20 @@ stretto: circa 30 richieste/minuto e 8.000 token/minuto per questo modello.
 
 Se anche con questi accorgimenti la run va in rate limit, torna a `ollama`
 (nessun limite esterno) o valuta un tier Groq a pagamento.
+
+**Perché non è più il default in produzione (2026-08-18)**: oltre ai
+limiti per-minuto sopra, il free tier di Groq ha anche un tetto di
+**200.000 token al GIORNO** per `gpt-oss-120b` — scoperto in uso reale
+sul deploy Render, dove una singola giornata di test/generazione di
+report ha esaurito il budget (`Used 199312/200000`), con un errore 429
+che richiedeva di aspettare fino al reset. È un limite duro, non
+aggirabile con retry o rate limiting lato client. Gemini (`gemini-3.5-flash`,
+vedi sopra) non ha un tetto giornaliero sui token, solo 1.500
+richieste/giorno — molto più capiente per un uso ripetuto durante la
+giornata — quindi è ora il default di `render.yaml`. Groq resta
+disponibile impostando `RESEARCH_AGENT_PROVIDER`/`SYNTHESIS_AGENT_PROVIDER=groq`
+a mano (in locale o su Render), utile se preferisci il tier a pagamento di
+Groq o se in futuro anche Gemini dovesse rivelarsi insufficiente.
 
 Per usare Azure, dalla pagina della risorsa in Azure AI Foundry servono due
 valori (oltre alla API key):
@@ -480,9 +505,14 @@ opzionali e a costo zero:
   doppia inizializzazione della stessa sessione MCP è innocua, costa solo
   un giro di richiesta/risposta in più, non un riavvio del processo).
 - **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
-  locale — su Render usa `groq` per entrambi i ruoli (già gestito da
-  `providers/groq_provider.py` per il carico di 8 agenti paralleli, vedi
-  sopra).
+  locale — su Render usa `gemini` (`gemini-3.5-flash`) per entrambi i
+  ruoli. Groq (`gpt-oss-120b`) fu il primo scelto ma in uso reale ha
+  colpito il suo tetto di **200.000 token al giorno** (non al minuto) dopo
+  una sola giornata di test — un limite duro. Gemini non ha un tetto
+  giornaliero sui token (solo 1.500 richieste/giorno) ed è quindi molto
+  più adatto a un uso ripetuto durante la giornata; vedi "Provider hosted
+  consigliato per il deploy" più sopra per i dettagli e perché non la
+  variante `-lite`.
 - **Storage persistente + tracking dei report**: [Supabase](https://supabase.com)
   progetto free (Postgres per l'indice dei report + Storage per i file).
   Necessario perché il disco di Render è effimero (si azzera a ogni

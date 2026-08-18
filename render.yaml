@@ -11,21 +11,24 @@ services:
     healthCheckPath: /health
     envVars:
       # Ollama non è utilizzabile su questo piano (nessuna GPU/modello
-      # locale) — Groq è il provider hosted gratuito consigliato, già
-      # dotato di rate limiting per 8 agenti paralleli (providers/groq_provider.py).
+      # locale). Groq (gpt-oss-120b) fu il primo provider hosted usato qui
+      # ma in uso reale ha colpito il suo tetto di 200.000 TOKEN AL GIORNO
+      # (non al minuto) dopo poche run — un limite duro, non aggirabile
+      # con retry/backoff. Gemini (gemini-3.5-flash) non ha un tetto
+      # giornaliero sui token (solo 1.500 RICHIESTE/giorno, molto più
+      # capiente per uso ripetuto) e un budget di 250K token/minuto contro
+      # gli 8K di Groq — verificato dal vivo che rispetta la disciplina di
+      # lettura fonti del prompt di ricerca (a differenza di
+      # gemini-3.5-flash-lite, più veloce ma che cita dagli snippet di
+      # ricerca senza leggere le pagine). providers/groq_provider.py resta
+      # nel codice come alternativa se preferisci passare a un piano Groq
+      # a pagamento.
       - key: RESEARCH_AGENT_PROVIDER
-        value: groq
+        value: gemini
       - key: SYNTHESIS_AGENT_PROVIDER
-        value: groq
-      - key: GROQ_API_KEY
+        value: gemini
+      - key: GEMINI_API_KEY
         sync: false
-      # openai/gpt-oss-20b was tried here for the research role (same free-
-      # tier limits as 120b, ~2x raw token speed) but a live test needed
-      # more search/fetch iterations than 120b, ran the TPM-budget
-      # compaction repeatedly, and finished truncated (stop_reason=length)
-      # — a real quality regression, not just slower. Reverted; both roles
-      # stay on gpt-oss-120b (GROQ_MODEL's default) until a faster model is
-      # found that doesn't truncate.
       # 512MB RAM on this plan: 8 concurrent MCP subprocesses can get
       # SIGKILL'd (exit 137). 3 keeps peak memory well under the limit at
       # the cost of the research phase taking longer (topics run in waves

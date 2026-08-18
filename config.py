@@ -52,8 +52,15 @@ AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4")
 # --- Google Gemini ----------------------------------------------------------
 # The API key is a secret and belongs in .env. The model can be changed in
 # .env.development without changing application code.
+# gemini-2.5-pro was removed from the free tier in April 2026 (paid-only
+# now) — gemini-3.5-flash is the current free-tier default: 15 RPM, 1500
+# RPD, ~250K TPM (vs Groq's gpt-oss-120b: 30 RPM but only 8K TPM and a hard
+# 200K-tokens/DAY cap — see the Groq section below for why that mattered
+# in practice). Verified live to follow the research prompt's fetch_url
+# discipline correctly, unlike gemini-3.5-flash-lite, which answered from
+# web_search snippets alone without reading the pages it cited.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 # qwen3.5:9b is the quality / memory balance for this Mac's 16 GB unified
 # memory. It supports tool calling and a 32k context is useful for research.
