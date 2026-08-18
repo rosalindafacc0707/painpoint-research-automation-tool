@@ -70,6 +70,7 @@ async def run_agent(
     if not api_key:
         raise RuntimeError("Gemini is not configured. Set GEMINI_API_KEY in the .env file.")
 
+    print(f"▶ Using model: {model}", file=sys.stderr)
     await session.initialize()
     mcp_tools = (await session.list_tools()).tools
     tools = [types.Tool(function_declarations=_mcp_tools_to_gemini(mcp_tools))]

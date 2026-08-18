@@ -177,10 +177,13 @@ un upgrade del piano.
 ### Provider Mistral
 
 Usa `mistral` per chiamare l'API La Plateforme di Mistral. Il default
-`mistral-large-latest` è il modello flagship con supporto al tool calling.
-Aggiungi `MISTRAL_API_KEY` in `.env` (crea la chiave su console.mistral.ai),
-poi seleziona `--provider mistral`. Usa gli stessi due tool MCP locali del
-provider Azure/Gemini: `web_search_ddg` per scoprire fonti e `fetch_url` per
+`mistral-medium-latest` supporta il tool calling con buon compromesso tra
+qualità e rate limit — `mistral-large-latest` ha lo stesso comportamento ma
+è andato in rate limit (HTTP 429) sotto il carico reale di questo agente
+(ricerca su più topic con tool call ravvicinate). Aggiungi `MISTRAL_API_KEY`
+in `.env` (crea la chiave su console.mistral.ai), poi seleziona
+`--provider mistral`. Usa gli stessi due tool MCP locali del provider
+Azure/Gemini: `web_search_ddg` per scoprire fonti e `fetch_url` per
 leggerle. Il modello si configura con `MISTRAL_MODEL` in `.env.development`.
 
 Per usare Azure, dalla pagina della risorsa in Azure AI Foundry servono due
@@ -280,7 +283,7 @@ pezzi, tutti opzionali e a costo zero:
   minuti di inattività — il primo utilizzo dopo una pausa richiede 30-60s
   di cold start.
 - **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
-  locale — `render.yaml` usa `mistral` (`mistral-large-latest`), che non
+  locale — `render.yaml` usa `mistral` (`mistral-medium-latest`), che non
   richiede carta di credito e non ha un tetto giornaliero sui token stretto
   come alcune alternative gratuite (vedi "Provider Mistral" più sopra).
 - **Storage persistente + tracking dei report**: [Supabase](https://supabase.com)

@@ -100,6 +100,7 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
             "AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT (.env.development)."
         )
 
+    print(f"▶ Using model: {AZURE_OPENAI_DEPLOYMENT}", file=sys.stderr)
     await session.initialize()
     mcp_tools = (await session.list_tools()).tools  # web_search_ddg + fetch_url
     tools = _mcp_tools_to_responses(mcp_tools)

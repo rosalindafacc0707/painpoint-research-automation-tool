@@ -124,6 +124,7 @@ async def run_agent(session: ClientSession, system_prompt: str, company_input: s
     if not GROQ_API_KEY:
         raise RuntimeError("Groq is not configured. Set GROQ_API_KEY in the .env file.")
 
+    print(f"▶ Using model: {GROQ_MODEL}", file=sys.stderr)
     await session.initialize()
     tools = _mcp_tools_to_chat_completions((await session.list_tools()).tools)
     messages: list[dict] = [

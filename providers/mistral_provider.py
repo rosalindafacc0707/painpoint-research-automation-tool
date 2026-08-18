@@ -13,9 +13,16 @@ import json
 import sys
 
 from mcp import ClientSession
-from openai import APIConnectionError, APIStatusError, AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI, RateLimitError
 
-from config import MISTRAL_API_KEY, MISTRAL_BASE_URL, MISTRAL_MODEL, MAX_TOKENS
+from config import (
+    MAX_TOKENS,
+    MISTRAL_API_KEY,
+    MISTRAL_BASE_URL,
+    MISTRAL_MAX_RETRIES,
+    MISTRAL_MODEL,
+    MISTRAL_RETRY_BASE_SECONDS,
+)
 from providers.base import RunResult
 
 MAX_ITERATIONS = 40
@@ -49,23 +56,65 @@ def _tool_result_text(result) -> str:
     return "\n".join(parts) if parts else "(no textual content returned)"
 
 
+def _retry_after_seconds(exc: RateLimitError) -> float | None:
+    """Read Mistral's own Retry-After header, if it sent one."""
+    header = exc.response.headers.get("retry-after")
+    if not header:
+        return None
+    try:
+        return float(header)
+    except ValueError:
+        return None
+
+
+async def _create_completion_with_retry(client: AsyncOpenAI, **kwargs):
+    """Call chat.completions.create, retrying on HTTP 429 with backoff.
+
+    Mistral's rate limit under this agent's bursty tool-call pattern
+    (several parallel web_search calls per turn, back-to-back completions)
+    was observed to trigger 429s within seconds of starting a run — without
+    a retry, that aborts the whole report. Prefers Mistral's own
+    Retry-After header when present; otherwise doubles the wait each
+    attempt (2s, 4s, 8s, ...).
+    """
+    for attempt in range(1, MISTRAL_MAX_RETRIES + 1):
+        try:
+            return await client.chat.completions.create(**kwargs)
+        except RateLimitError as exc:
+            if attempt == MISTRAL_MAX_RETRIES:
+                raise
+            delay = _retry_after_seconds(exc) or MISTRAL_RETRY_BASE_SECONDS * (2 ** (attempt - 1))
+            print(
+                f"  ⚠ Mistral rate limited (429) — retrying in {delay:.1f}s "
+                f"(attempt {attempt}/{MISTRAL_MAX_RETRIES})",
+                file=sys.stderr,
+            )
+            await asyncio.sleep(delay)
+
+
 async def run_agent(session: ClientSession, system_prompt: str, company_input: str) -> RunResult:
     """Run the Mistral model and execute MCP tool calls until it completes."""
     if not MISTRAL_API_KEY:
         raise RuntimeError("Mistral is not configured. Set MISTRAL_API_KEY in the .env file.")
 
+    print(f"▶ Using model: {MISTRAL_MODEL}", file=sys.stderr)
     await session.initialize()
     tools = _mcp_tools_to_chat_completions((await session.list_tools()).tools)
     messages: list[dict] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": company_input},
     ]
-    client = AsyncOpenAI(base_url=MISTRAL_BASE_URL, api_key=MISTRAL_API_KEY)
+    # max_retries=0: retries are handled explicitly by
+    # _create_completion_with_retry below, so a 429 doesn't get retried
+    # twice (once silently by the SDK, once by us) with two different,
+    # confusing backoff schedules.
+    client = AsyncOpenAI(base_url=MISTRAL_BASE_URL, api_key=MISTRAL_API_KEY, max_retries=0)
 
     response = None
     try:
         for _ in range(MAX_ITERATIONS):
-            response = await client.chat.completions.create(
+            response = await _create_completion_with_retry(
+                client,
                 model=MISTRAL_MODEL,
                 messages=messages,
                 tools=tools,

@@ -42,6 +42,7 @@ def _tool_result_text(result) -> str:
 
 async def run_agent(session: ClientSession, system_prompt: str, company_input: str) -> RunResult:
     """Drive the agentic loop until the model finishes; return the final text."""
+    print(f"▶ Using model: {MODEL_NAME}", file=sys.stderr)
     await session.initialize()
     all_mcp_tools = (await session.list_tools()).tools
     # Only expose fetch_url here — discovery already comes from web_search.

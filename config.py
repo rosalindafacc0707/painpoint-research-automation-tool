@@ -66,7 +66,14 @@ GROQ_TOOL_RESULT_MAX_CHARS = int(os.getenv("GROQ_TOOL_RESULT_MAX_CHARS", "1800")
 # --- Mistral La Plateforme --------------------------------------------------
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 MISTRAL_BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
-MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+# Retry-with-backoff for HTTP 429 (rate limited) responses — observed live
+# under this agent's bursty tool-call pattern (several parallel searches per
+# turn, back-to-back completions). MISTRAL_RETRY_BASE_SECONDS doubles on each
+# attempt (2s, 4s, 8s, ...) unless Mistral's own Retry-After header says
+# otherwise.
+MISTRAL_MAX_RETRIES = int(os.getenv("MISTRAL_MAX_RETRIES", "5"))
+MISTRAL_RETRY_BASE_SECONDS = float(os.getenv("MISTRAL_RETRY_BASE_SECONDS", "2"))
 
 # Increment version at every deep change of the system prompt and create a new file prompts/system_prompt_vN.md
 PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v7")

@@ -65,6 +65,7 @@ def _tool_arguments(arguments) -> dict:
 
 async def run_agent(session: ClientSession, system_prompt: str, company_input: str) -> RunResult:
     """Run the local model and execute any requested local MCP tools."""
+    print(f"▶ Using model: {OLLAMA_MODEL}", file=sys.stderr)
     await session.initialize()
     mcp_tools = (await session.list_tools()).tools
     tools = _mcp_tools_to_ollama(mcp_tools)

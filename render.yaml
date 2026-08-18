@@ -11,9 +11,11 @@ services:
     healthCheckPath: /health
     envVars:
       # Ollama non è utilizzabile su questo piano (nessuna GPU/modello
-      # locale). mistral-large-latest (config.py) rispetta la disciplina di
+      # locale). mistral-medium-latest (config.py) rispetta la disciplina di
       # lettura fonti del prompt e non ha un tetto giornaliero sui token
       # stretto come alcune alternative gratuite — vedi providers/mistral_provider.py.
+      # mistral-large-latest ha lo stesso comportamento ma è andato in rate
+      # limit (429) sotto carico reale; medium è il compromesso attuale.
       # anthropic/azure/gemini/groq restano nel codice come alternative.
       - key: PROVIDER
         value: mistral
