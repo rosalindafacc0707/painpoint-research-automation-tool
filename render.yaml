@@ -1,0 +1,35 @@
+# Render Blueprint — vedi README.md "Deploy su Render" per i passi completi.
+# Free web service: nessuna carta di credito richiesta, HTTPS automatico,
+# va in sleep dopo ~15 min di inattività (cold start ~30-60s alla riattivazione).
+services:
+  - type: web
+    name: painpoint-researcher
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Ollama non è utilizzabile su questo piano (nessuna GPU/modello
+      # locale). mistral-large-latest (config.py) rispetta la disciplina di
+      # lettura fonti del prompt e non ha un tetto giornaliero sui token
+      # stretto come alcune alternative gratuite — vedi providers/mistral_provider.py.
+      # anthropic/azure/gemini/groq restano nel codice come alternative.
+      - key: PROVIDER
+        value: mistral
+      - key: MISTRAL_API_KEY
+        sync: false
+      # Storage persistente per i report generati (Postgres + Storage bucket).
+      # Vedi supabase/schema.sql per la tabella e il README per il bucket.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: reports
+      # Protezione della UI/API: senza queste due, l'app resta aperta a
+      # chiunque abbia l'URL.
+      - key: BASIC_AUTH_USER
+        sync: false
+      - key: BASIC_AUTH_PASSWORD
+        sync: false

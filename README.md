@@ -250,6 +250,12 @@ Endpoint disponibili (prefisso `/painpoint-researcher`):
   `stop_reason`, `truncated`, `download_url`, `docx_download_url`).
 - `GET /download/{filename}` — restituisce il file richiesto (`.md` o
   `.docx`) con il `Content-Type` corretto, come allegato scaricabile.
+- `GET /reports` — indice di tutti i report generati, da Supabase (lista
+  vuota se non configurato — vedi "Deploy su Render" più sotto).
+- `GET /reports/{id}/content` — testo markdown di un report passato.
+- `GET /reports/{id}/download?kind=md|docx` — redirect a una signed URL
+  Supabase (download diretto dal bucket, mai proxato dal backend).
+- `GET /health` — liveness check, non richiede Basic Auth.
 
 Il frontend fa un form di intake (stessi campi di
 `inputs/sample_company_input.md`, incluso lo switch di provider), chiama
@@ -262,6 +268,65 @@ un export testuale creato nel browser. La vista "in corso" con i passi di
 ricerca è puramente cosmetica: il backend risponde con un'unica chiamata
 sincrona, non ci sono eventi di progresso reali durante l'esecuzione
 dell'agente.
+
+## Deploy su Render (+ Supabase, + Basic Auth)
+
+Oltre all'uso locale descritto sopra, il progetto può girare come piccolo
+prodotto interno raggiungibile da un URL, gratis, senza subscription. Tre
+pezzi, tutti opzionali e a costo zero:
+
+- **Hosting**: [Render](https://render.com) piano free (no carta di
+  credito, HTTPS automatico). Limite noto: l'istanza va in sleep dopo ~15
+  minuti di inattività — il primo utilizzo dopo una pausa richiede 30-60s
+  di cold start.
+- **Provider LLM**: Ollama non è utilizzabile su un host senza GPU/modello
+  locale — `render.yaml` usa `mistral` (`mistral-large-latest`), che non
+  richiede carta di credito e non ha un tetto giornaliero sui token stretto
+  come alcune alternative gratuite (vedi "Provider Mistral" più sopra).
+- **Storage persistente + tracking dei report**: [Supabase](https://supabase.com)
+  progetto free (Postgres per l'indice dei report + Storage per i file).
+  Necessario perché il disco di Render è effimero (si azzera a ogni
+  restart/redeploy) — senza questo, i report generati sparirebbero e la
+  history resterebbe solo nel browser di chi li ha generati.
+- **Accesso**: HTTP Basic Auth (una sola coppia utente/password, in
+  variabili d'ambiente) protegge sia la UI sia le API — senza, chiunque
+  abbia l'URL può usare il tool.
+
+Nessuna di queste variabili è obbligatoria per l'uso locale descritto nel
+resto di questo README: se non impostate, l'app si comporta esattamente
+come prima (nessuna regressione).
+
+### Setup Supabase (una tantum)
+
+1. Crea un account e un progetto gratuito su supabase.com.
+2. SQL Editor → incolla ed esegui `supabase/schema.sql` (crea la tabella
+   `reports`).
+3. Storage → New bucket → nome `reports` (deve combaciare con
+   `SUPABASE_BUCKET`), **Public bucket disattivato** — tutti i download
+   passano da signed URL temporanee generate dal backend
+   (`services/storage_service.py`), mai da URL pubbliche permanenti.
+4. Project Settings → API → copia `Project URL` (→ `SUPABASE_URL`) e la
+   **`service_role` key** (→ `SUPABASE_SERVICE_ROLE_KEY`; **non** la
+   `anon` key — la service role serve solo lato backend e non va mai
+   esposta al frontend).
+
+### Setup Render (una tantum)
+
+1. Crea un account gratuito su render.com e collega il repository GitHub.
+2. New → Blueprint → seleziona questo repo: Render legge `render.yaml` e
+   configura automaticamente il servizio (piano free, build/start command,
+   health check su `/health`).
+3. Nella dashboard del servizio, inserisci a mano i valori dei secret
+   marcati `sync: false` in `render.yaml`: `MISTRAL_API_KEY`,
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BASIC_AUTH_USER`,
+   `BASIC_AUTH_PASSWORD`.
+4. Deploy. L'URL assegnato da Render è quello da condividere con il capo
+   — comunica utente/password Basic Auth separatamente (non via email in
+   chiaro).
+
+Se questo branch sostituisce un deploy Render esistente basato su un altro
+branch, ricollega semplicemente il servizio Render (o il Blueprint) a questo
+branch/repo: `render.yaml` verrà riletto automaticamente al prossimo deploy.
 
 ## Regole ferree di questa fase
 

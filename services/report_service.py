@@ -8,6 +8,7 @@ README.md.
 """
 
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
 import sys
@@ -25,6 +26,7 @@ from config import (
     SYSTEM_PROMPT_PATH,
 )
 from schemas.requests import GenerateMdDocRequest
+from services import storage_service
 from services.docx_export import markdown_to_docx
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -116,7 +118,33 @@ async def generate_pain_point_report(request: GenerateMdDocRequest) -> dict:
     (OUTPUTS_DIR / filename).write_text(result.text, encoding="utf-8")
 
     docx_filename = f"{base_name}.docx"
-    markdown_to_docx(result.text).save(OUTPUTS_DIR / docx_filename)
+    docx_document = markdown_to_docx(result.text)
+    docx_document.save(OUTPUTS_DIR / docx_filename)
+
+    download_url = f"/painpoint-researcher/download/{filename}"
+    docx_download_url = f"/painpoint-researcher/download/{docx_filename}"
+
+    # Persist to Supabase (Storage + Postgres index) when configured, so the
+    # report survives Render's ephemeral disk and is visible/downloadable
+    # from any browser via GET /reports — not just this same request's
+    # local-disk copy. No-ops locally when Supabase isn't set up.
+    if storage_service.is_configured():
+        docx_buffer = BytesIO()
+        docx_document.save(docx_buffer)
+        report_id = storage_service.save_report(
+            company_name=request.company_name,
+            filename=filename,
+            docx_filename=docx_filename,
+            md_text=result.text,
+            docx_bytes=docx_buffer.getvalue(),
+            provider=provider,
+            model=result.model,
+            prompt_version=PROMPT_VERSION,
+            stop_reason=result.stop_reason,
+            truncated=result.truncated,
+        )
+        download_url = f"/painpoint-researcher/reports/{report_id}/download?kind=md"
+        docx_download_url = f"/painpoint-researcher/reports/{report_id}/download?kind=docx"
 
     return {
         "filename": filename,
@@ -127,4 +155,6 @@ async def generate_pain_point_report(request: GenerateMdDocRequest) -> dict:
         "prompt_version": PROMPT_VERSION,
         "stop_reason": result.stop_reason,
         "truncated": result.truncated,
+        "download_url": download_url,
+        "docx_download_url": docx_download_url,
     }

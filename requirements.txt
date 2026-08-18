@@ -17,3 +17,7 @@ pypdf>=5.0.0
 openai>=1.50.0
 
 google-genai>=1.0.0
+
+# Persistent storage for generated reports (Postgres index + Storage bucket),
+# used by services/storage_service.py when SUPABASE_URL is configured.
+supabase>=2.0.0

@@ -1,8 +1,12 @@
+from typing import Literal
+
+import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 
 from schemas.requests import GenerateMdDocRequest
 from schemas.responses import GenerateMdDocResponse
+from services import storage_service
 from services.report_service import OUTPUTS_DIR, generate_pain_point_report
 
 router = APIRouter(prefix="/painpoint-researcher", tags=["research"])
@@ -37,11 +41,7 @@ async def generate(body: GenerateMdDocRequest):
             raise HTTPException(status_code=502, detail=detail) from exc
         raise
 
-    return GenerateMdDocResponse(
-        **result,
-        download_url=f"/painpoint-researcher/download/{result['filename']}",
-        docx_download_url=f"/painpoint-researcher/download/{result['docx_filename']}",
-    )
+    return GenerateMdDocResponse(**result)
 
 
 @router.get("/download/{filename}")
@@ -56,3 +56,39 @@ async def download(filename: str):
         media_type=media_type,
         filename=filename,
     )
+
+
+@router.get("/reports")
+async def list_reports():
+    """Every report ever generated, from Supabase — shared across all users/
+    devices, unlike the browser-local history it replaces. Empty list when
+    Supabase isn't configured (local dev, no persistence set up)."""
+    return storage_service.list_reports()
+
+
+def _get_report_or_404(report_id: str) -> dict:
+    report = storage_service.get_report(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return report
+
+
+@router.get("/reports/{report_id}/content")
+async def report_content(report_id: str):
+    """Raw markdown text of a past report, for the same in-page preview
+    rendering used right after generation."""
+    report = _get_report_or_404(report_id)
+    url = storage_service.signed_url(report["md_path"])
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+    response.raise_for_status()
+    return PlainTextResponse(response.text)
+
+
+@router.get("/reports/{report_id}/download")
+async def report_download(report_id: str, kind: Literal["md", "docx"] = "docx"):
+    """Redirect to a time-limited Supabase signed URL — binary files are
+    streamed straight from Storage, never proxied through this process."""
+    report = _get_report_or_404(report_id)
+    path = report["md_path"] if kind == "md" else report["docx_path"]
+    return RedirectResponse(storage_service.signed_url(path))
